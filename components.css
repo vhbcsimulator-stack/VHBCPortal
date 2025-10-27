@@ -1,0 +1,173 @@
+/* Component-specific styles */
+
+/* Navigation */
+.nav-link {
+    color: var(--dark-gray);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.nav-link:hover {
+    background-color: var(--light-gray);
+}
+
+.nav-link.active {
+    background-color: var(--primary-red);
+    color: white;
+}
+
+/* Announcement Cards */
+.announcement-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease;
+}
+
+.announcement-card:hover {
+    transform: translateY(-2px);
+}
+
+.announcement-card h3 {
+    color: var(--primary-red);
+    margin-bottom: 0.5rem;
+}
+
+.announcement-card small {
+    color: #6c757d;
+}
+
+/* Agent Cards */
+.agent-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.agent-card h3 {
+    margin: 0;
+    color: var(--dark-gray);
+}
+
+/* Modal Components */
+.modal-content {
+    border-radius: 15px;
+    border: none;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--accent);
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--accent);
+    padding: 1.5rem;
+}
+
+/* Search Components */
+.search-bar {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.search-bar input {
+    padding-left: 2.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+}
+
+.search-bar i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+}
+
+/* Filter Components */
+.filter-group {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.filter-group select {
+    min-width: 150px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    padding: 0.5rem;
+}
+
+/* Action Buttons */
+.action-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.action-btn-primary {
+    background-color: var(--primary-red);
+    color: white;
+}
+
+.action-btn-secondary {
+    background-color: var(--accent);
+    color: var(--dark-gray);
+}
+
+/* Status Indicators */
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.status-indicator.available {
+    background-color: #28a745;
+}
+
+.status-indicator.reserved {
+    background-color: #ffc107;
+}
+
+.status-indicator.sold {
+    background-color: var(--primary-red);
+}
+
+/* Floating Action Button */
+.floating-action-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: var(--primary-red);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.floating-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+}
