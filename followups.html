@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VHBC Sales Portal - Follow-Ups</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body data-page="followups">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="text-center mb-4">
+            <img src="assets/vhbc logo.png" alt="VHBC Logo" class="sidebar-logo" style="max-width: 120px;">
+        </div>
+        <div class="nav flex-column">
+            <a href="dashboard.html" class="nav-link">
+                <i class="fas fa-chart-line me-2"></i> Dashboard
+            </a>
+            <a href="projects.html" class="nav-link">
+                <i class="fas fa-building me-2"></i> Projects
+            </a>
+            <a href="agents.html" class="nav-link">
+                <i class="fas fa-users me-2"></i> Agents
+            </a>
+            <a href="followups.html" class="nav-link active">
+                <i class="fas fa-tasks me-2"></i> Follow-Ups
+            </a>
+            <a href="announcements.html" class="nav-link">
+                <i class="fas fa-bullhorn me-2"></i> Announcements
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container-fluid">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">Follow-Ups</h1>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newFollowUpModal">
+                    <i class="fas fa-plus me-2"></i> New Follow-Up
+                </button>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="btn-group mb-4">
+                <button type="button" class="btn btn-outline-primary active" data-filter="today">Today</button>
+                <button type="button" class="btn btn-outline-primary" data-filter="week">This Week</button>
+                <button type="button" class="btn btn-outline-primary" data-filter="completed">Completed</button>
+            </div>
+
+            <!-- Follow-Ups Table -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table" id="followUpsTable">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Project</th>
+                                    <th>Agent</th>
+                                    <th>Follow-Up Date</th>
+                                    <th>Status</th>
+                                    <th>Remarks</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- New Follow-Up Modal -->
+    <div class="modal fade" id="newFollowUpModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Follow-Up</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newFollowUpForm">
+                        <div class="mb-3">
+                            <label class="form-label">Client Name</label>
+                            <input type="text" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Project</label>
+                            <select class="form-select" required>
+                                <option value="MVLC">MVLC</option>
+                                <option value="MSCC">MSCC</option>
+                                <option value="ERHD">ERHD</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Agent</label>
+                            <select class="form-select" required>
+                                <!-- Will be populated by JavaScript -->
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Follow-Up Date</label>
+                            <input type="date" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Remarks</label>
+                            <textarea class="form-control" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="newFollowUpForm" class="btn btn-primary">Save Follow-Up</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.sample.js"></script>
+    <script src="js/config.local.js"></script>
+    <script src="js/mockData.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VHBC Sales Portal - Projects</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body data-page="projects">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="text-center mb-4">
+            <img src="assets/vhbc logo.png" alt="VHBC Logo" class="sidebar-logo" style="max-width: 120px;">
+        </div>
+        <div class="nav flex-column">
+            <a href="dashboard.html" class="nav-link">
+                <i class="fas fa-chart-line me-2"></i> Dashboard
+            </a>
+            <a href="projects.html" class="nav-link active">
+                <i class="fas fa-building me-2"></i> Projects
+            </a>
+            <a href="agents.html" class="nav-link">
+                <i class="fas fa-users me-2"></i> Agents
+            </a>
+            <a href="followups.html" class="nav-link">
+                <i class="fas fa-tasks me-2"></i> Follow-Ups
+            </a>
+            <a href="announcements.html" class="nav-link">
+                <i class="fas fa-bullhorn me-2"></i> Announcements
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container-fluid">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">Projects</h1>
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-light me-2" id="viewMap">
+                        <i class="fas fa-map me-2"></i> View Map
+                    </button>
+                    <button class="btn btn-outline-success me-2" id="importCsvBtn">
+                        <i class="fas fa-file-excel me-2"></i> Import CSV/Excel
+                    </button>
+                    
+                    <button class="btn btn-outline-primary me-2" id="openPriceModal">
+                        <i class="fas fa-tags me-2"></i> Update Prices
+                    </button>
+                    <!-- Upload Map: for MVLC show phase choices, otherwise simple upload -->
+                    <div id="uploadMapSimple" class="me-2">
+                        <button class="btn btn-outline-secondary" id="uploadMapBtn">
+                            <i class="fas fa-file-upload me-2"></i> Upload Map
+                        </button>
+                    </div>
+                    <div id="uploadMapDropdown" class="btn-group me-2 d-none">
+                        <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-file-upload me-2"></i> Upload Map (MVLC)
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-1">Phase 1 map</a></li>
+                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-2">Phase 2 map</a></li>
+                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-3">Phase 3 map</a></li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-primary" id="uploadFlyer">
+                        <i class="fas fa-upload me-2"></i> Upload Flyer
+                    </button>
+                    <!-- Hidden file input for uploading map files -->
+                    <input type="file" id="uploadMapInput" accept=".png,.jpg,.jpeg,.svg,.pdf" style="display:none">
+                    <!-- Hidden file input for importing inventory CSV -->
+                    <input type="file" id="importCsvInput" accept=".csv,.xlsx,.xls" style="display:none">
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Project</label>
+                            <select id="projectSelect" class="form-select filter-select" data-filter-type="project">
+                                <option value="MVLC">MVLC</option>
+                                <option value="MSCC">MSCC</option>
+                                <option value="ERHD">ERHD</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Category</label>
+                            <select id="categorySelect" class="form-select filter-select" data-filter-type="category">
+                                <option value="all">All Categories</option>
+                                <option value="Premium">Premium</option>
+                                <option value="Standard">Standard</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Status</label>
+                            <select id="statusSelect" class="form-select filter-select" data-filter-type="status">
+                                <option value="all">All Statuses</option>
+                                <option value="open">Open</option>
+                                <option value="reserved">Reserved</option>
+                                <option value="sold">Sold</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3 d-none" id="phaseContainer">
+                            <label class="form-label">Phase</label>
+                            <select id="phaseSelect" class="form-select">
+                                <option value="all">All Phases</option>
+                                <option value="phase-1">Phase 1</option>
+                                <option value="phase-2">Phase 2</option>
+                                <option value="phase-3">Phase 3</option>
+                            </select>
+                        </div>
+                        
+                        
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory Table -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table" id="inventoryTable">
+                            <thead>
+                                <tr>
+                                    <th>Lot #</th>
+                                    <th>Size (sqm)</th>
+                                    <th>Price/sqm</th>
+                                    <th>Total</th>
+                                    <th>Category</th>
+                                    <th>Status</th>
+                                    <th>Last Updated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Map Preview Modal -->
+    <div class="modal fade" id="mapModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header d-flex flex-column align-items-start">
+                    <div class="w-100 d-flex justify-content-between align-items-center">
+                        <h5 class="modal-title">Map Preview</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <!-- Phase selector for MVLC inside modal -->
+                    <div class="w-100 mt-2" id="mapModalPhaseWrap" style="display:none;">
+                        <label class="form-label mb-1">Phase:</label>
+                        <select id="mapModalPhaseSelect" class="form-select">
+                            <option value="phase-1">Phase 1</option>
+                            <option value="phase-2">Phase 2</option>
+                            <option value="phase-3">Phase 3</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-body text-center map-preview" style="padding:0; display:flex; justify-content:center; align-items:center; min-height:75vh; background:#f8f9fa;">
+                    <!-- Image preview for images -->
+                    <img id="mapModalImage" src="" alt="Map Preview" class="img-fluid" style="display:none; max-height:75vh; max-width:100%; object-fit:contain; margin:auto; box-shadow:0 0 10px rgba(0,0,0,0.1);" />
+                    <!-- Embed for PDFs -->
+                    <embed id="mapModalEmbed" src="" type="application/pdf" style="display:none; width:100%; height:75vh; margin:auto; box-shadow:0 0 10px rgba(0,0,0,0.1);" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Prices Modal -->
+    <div class="modal fade" id="priceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Update Category Prices</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Prices apply to the currently selected project. Set a price per sqm for each category. Leaving a field blank keeps existing prices.</p>
+                    <!-- MVLC: phase group selection -->
+                    <div id="pricePhaseGroup" class="mb-3" style="display:none;">
+                        <label class="form-label mb-1">Price scope:</label>
+                        <div class="btn-group" role="group" aria-label="MVLC Phase group">
+                            <input type="radio" class="btn-check" name="pricePhase" id="pricePhase1" value="phase1" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pricePhase1">Phase 1</label>
+                            <input type="radio" class="btn-check" name="pricePhase" id="pricePhase2" value="phase2" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pricePhase2">Phase 2</label>
+                            <input type="radio" class="btn-check" name="pricePhase" id="pricePhase3" value="phase3" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pricePhase3">Phase 3</label>
+                        </div>
+                    </div>
+                    <div id="priceFormBody" class="vstack gap-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="savePricesBtn">Save & Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.sample.js"></script>
+    <script src="js/config.local.js"></script>
+    <script src="js/api.js"></script>
+<!-- Excel parser for .xlsx/.xls support -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
