@@ -41,41 +41,35 @@
             <!-- Header -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h1 class="h3">Projects</h1>
-                <div class="d-flex align-items-center">
-                    <button class="btn btn-light me-2" id="viewMap">
-                        <i class="fas fa-map me-2"></i> View Map
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="projectActionsMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-bars me-2"></i> Actions
                     </button>
-                    <button class="btn btn-outline-success me-2" id="importCsvBtn">
-                        <i class="fas fa-file-excel me-2"></i> Import CSV/Excel
-                    </button>
-                    
-                    <button class="btn btn-outline-primary me-2" id="openPriceModal">
-                        <i class="fas fa-tags me-2"></i> Update Prices
-                    </button>
-                    <!-- Upload Map: for MVLC show phase choices, otherwise simple upload -->
-                    <div id="uploadMapSimple" class="me-2">
-                        <button class="btn btn-outline-secondary" id="uploadMapBtn">
-                            <i class="fas fa-file-upload me-2"></i> Upload Map
-                        </button>
-                    </div>
-                    <div id="uploadMapDropdown" class="btn-group me-2 d-none">
-                        <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-file-upload me-2"></i> Upload Map (MVLC)
-                        </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-1">Phase 1 map</a></li>
-                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-2">Phase 2 map</a></li>
-                            <li><a class="dropdown-item upload-map-phase" href="#" data-phase="phase-3">Phase 3 map</a></li>
-                        </ul>
-                    </div>
-                    <button class="btn btn-primary" id="uploadFlyer">
-                        <i class="fas fa-upload me-2"></i> Upload Flyer
-                    </button>
-                    <!-- Hidden file input for uploading map files -->
-                    <input type="file" id="uploadMapInput" accept=".png,.jpg,.jpeg,.svg,.pdf" style="display:none">
-                    <!-- Hidden file input for importing inventory CSV -->
-                    <input type="file" id="importCsvInput" accept=".csv,.xlsx,.xls" style="display:none">
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="projectActionsMenu">
+                        <li><a class="dropdown-item" href="#" id="viewMap"><i class="fas fa-map me-2"></i>View Map</a></li>
+                        <li><a class="dropdown-item" href="#" id="importCsvBtn"><i class="fas fa-file-excel me-2"></i>Import CSV</a></li>
+                        <li><a class="dropdown-item" href="#" id="openPriceModal"><i class="fas fa-tags me-2"></i>Update Prices</a></li>
+                        <li id="uploadMapSimple"><a class="dropdown-item" href="#" id="uploadMapBtn"><i class="fas fa-file-upload me-2"></i>Upload Map</a></li>
+                        <li id="uploadMapDropdown" class="d-none">
+                            <h6 class="dropdown-header">Upload Map (MVLC)</h6>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-1">Phase 1 map</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-2">Phase 2 map</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-3">Phase 3 map</a>
+                        </li>
+                        <li><a class="dropdown-item" href="#" id="uploadFlyer"><i class="fas fa-upload me-2"></i>Upload Flyer</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" id="uploadProjectDev"><i class="fas fa-upload me-2"></i>Upload Project Development</a></li>
+                        <li><a class="dropdown-item" href="#" id="viewProjectDevUpdates"><i class="fas fa-images me-2"></i>View Project Development Updates</a></li>
+                        <li><a class="dropdown-item" href="#" id="uploadFutureDev"><i class="fas fa-upload me-2"></i>Upload Future Development</a></li>
+                    </ul>
                 </div>
+                <!-- Hidden file input for uploading map files -->
+                <input type="file" id="uploadMapInput" accept=".png,.jpg,.jpeg,.svg,.pdf" style="display:none">
+                <!-- Hidden file input for importing inventory CSV -->
+                <input type="file" id="importCsvInput" accept=".csv,.xlsx,.xls" style="display:none">
+                <!-- Hidden file inputs for project/future development uploads -->
+                <input type="file" id="uploadProjectDevInput" accept=".png,.jpg,.jpeg,.svg,.pdf" style="display:none">
+                <input type="file" id="uploadFutureDevInput" accept=".png,.jpg,.jpeg,.svg,.pdf" style="display:none">
             </div>
 
             <!-- Filters -->
@@ -125,6 +119,13 @@
             <!-- Inventory Table -->
             <div class="card">
                 <div class="card-body">
+                    <!-- Search Bar -->
+                    <div class="mb-3">
+                        <div class="input-group w-100">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" id="inventorySearch" class="form-control search-input" placeholder="Search lot number..." aria-label="Search lot number">
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="table" id="inventoryTable">
                             <thead>

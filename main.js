@@ -245,7 +245,11 @@ function handleNavigation(e) {
 }
 
 // Stubs for search/filter
-function handleSearch(e) { /* implement as needed */ }
+function handleSearch(e) {
+  if (document.body.getAttribute('data-page') === 'projects') {
+    renderInventoryTable();
+  }
+}
 function handleFilter(e) {
   if (e.target.dataset.filterType === 'project') {
     updateCategoryOptions(e.target.value);
@@ -304,6 +308,8 @@ function renderInventoryTable() {
   const statusSel = $('#statusSelect')?.value || 'all';
   const phaseSel = $('#phaseSelect')?.value || 'all';
   const isMVLC = project === 'MVLC';
+  const qRaw = $('#inventorySearch')?.value || '';
+  const q = qRaw.trim().toLowerCase();
   // Remove local-storage based price overlays in table display
   const priceMap = null;
   const priceMapP1 = null;
@@ -354,7 +360,12 @@ function renderInventoryTable() {
         const lPhaseVal = lPhaseNum ? `phase-${lPhaseNum}`.toLowerCase() : '';
         phaseOk = lPhaseVal === phaseSel.toLowerCase();
       }
-      return catOk && statusOk && phaseOk;
+      let searchOk = true;
+      if (q) {
+        const lotHay = String(l.lotNumber ?? l.lot_no ?? l.lot ?? '').toLowerCase();
+        searchOk = lotHay.includes(q);
+      }
+      return catOk && statusOk && phaseOk && searchOk;
     });
 
     // Sort by phase 1 -> 2 -> 3 when not filtered by a specific phase
@@ -1089,3 +1100,275 @@ document.addEventListener('DOMContentLoaded', () => {
     try { userName.textContent = JSON.parse(u).name || 'Admin'; } catch {}
   }
 });
+
+// ---- Project Development Upload (Drag & Drop, multiple, no save) ----
+function ensureProjectDevStyles() {
+  if (document.getElementById('projectDevUploadStyles')) return;
+  const css = `
+    #projectDevDropzone { border-style: dashed !important; cursor: pointer; }
+    #projectDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
+    #projectDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
+    #projectDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
+    #projectDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
+    /* Viewer styles */
+    #projectDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
+    #projectDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    #projectDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
+    #projectDevGrid .dev-card:hover .delete-btn { opacity: 1; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'projectDevUploadStyles';
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+function bytesToSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const sizes = ['B','KB','MB','GB'];
+  const i = bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024));
+  const val = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
+  return `${val} ${sizes[i]}`;
+}
+
+function openProjectDevUploadModal() {
+  ensureProjectDevStyles();
+
+  let modalEl = document.getElementById('projectDevUploadModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.id = 'projectDevUploadModal';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Upload Project Development Images</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="projectDevDropzone" class="border border-2 border-secondary rounded-3 p-5 text-center">
+              <i class="fas fa-images fa-2x mb-3 text-secondary"></i>
+              <p class="mb-1">Drag and drop images here</p>
+              <p class="text-muted small">or click to browse</p>
+            </div>
+            <input type="file" id="projectDevFileInput" accept="image/*" multiple style="display:none">
+            <div id="projectDevPreview" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="projectDevClearBtn" class="btn btn-outline-secondary">Clear</button>
+            <button type="button" id="projectDevUploadBtn" class="btn btn-primary">Upload</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modalEl);
+
+    const dropzone = modalEl.querySelector('#projectDevDropzone');
+    const fileInput = modalEl.querySelector('#projectDevFileInput');
+    const preview = modalEl.querySelector('#projectDevPreview');
+    const clearBtn = modalEl.querySelector('#projectDevClearBtn');
+    const uploadBtn = modalEl.querySelector('#projectDevUploadBtn');
+
+    let selected = [];
+
+    function renderPreview() {
+      preview.innerHTML = selected.map((item, idx) => {
+        const name = item.file.name;
+        const size = bytesToSize(item.file.size);
+        const url = item.url;
+        return `
+          <div class="col">
+            <div class="position-relative preview-item">
+              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">✕</button>
+              <img src="${url}" alt="${name}">
+              <div class="meta mt-1 text-truncate" title="${name}">${name} • ${size}</div>
+            </div>
+          </div>`;
+      }).join('');
+
+      preview.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.getAttribute('data-idx'), 10);
+          if (!isNaN(i) && selected[i]) {
+            URL.revokeObjectURL(selected[i].url);
+            selected.splice(i, 1);
+            renderPreview();
+          }
+        });
+      });
+    }
+
+    function addFiles(fileList) {
+      const files = Array.from(fileList || []);
+      const imgs = files.filter(f => f.type && f.type.startsWith('image/'));
+      imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
+      renderPreview();
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+    ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }));
+    ['dragleave','dragend','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', e => {
+      addFiles(e.dataTransfer?.files || []);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      selected.forEach(it => URL.revokeObjectURL(it.url));
+      selected = [];
+      fileInput.value = '';
+      renderPreview();
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+      const proj = document.querySelector('#projectSelect')?.value;
+      if (!proj) { showNotification('Please select a project first', 'error'); return; }
+      if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
+      if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+      try {
+        const hasSession = await hasSupabaseSession();
+        if (!hasSession) { showNotification('Not logged in', 'error'); return; }
+      } catch { showNotification('Auth check failed', 'error'); return; }
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      try {
+        const files = selected.map(s => s.file);
+        const results = await window.api.uploadProjectDevelopmentBatch(files, proj);
+        const ok = (results || []).length;
+        showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
+        // Reset and close modal
+        clearBtn.click();
+        if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+          bootstrap.Modal.getInstance(modalEl)?.hide();
+        } else {
+          modalEl.style.display = 'none';
+        }
+      } catch (err) {
+        console.error('Upload failed:', err);
+        showNotification('Failed to upload images', 'error');
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Upload';
+      }
+    });
+  }
+
+  if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+    new bootstrap.Modal(modalEl).show();
+  } else {
+    modalEl.style.display = 'block';
+  }
+}
+
+// Hook the menu item
+(function hookProjectDevUpload() {
+  const link = document.getElementById('uploadProjectDev');
+  if (!link) return;
+  link.addEventListener('click', ev => { ev.preventDefault(); openProjectDevUploadModal(); });
+})();
+
+// ---- Viewer for Project Development Updates ----
+async function renderProjectDevGrid(grid, project) {
+  grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
+  try {
+    const items = (await window.api.getProjectDevImages(project)) || [];
+    if (!items.length) {
+      grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No development updates yet.</div>';
+      return;
+    }
+    grid.innerHTML = items.map((it, idx) => {
+      const url = it.image_link || it.image_URL || it.url;
+      const id = it.id || idx;
+      const title = it.project_name || project;
+      return `
+        <div class="col-6 col-md-4 col-lg-3" data-id="${id}">
+          <div class="dev-card border">
+            <button type="button" class="btn btn-sm btn-danger delete-btn" title="Delete" data-url="${encodeURIComponent(url)}">Delete</button>
+            <img src="${url}" alt="${title}">
+          </div>
+        </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const raw = btn.getAttribute('data-url') || '';
+        const url = decodeURIComponent(raw);
+        const card = btn.closest('[data-id]');
+        const ok = window.confirm('Delete this image? This cannot be undone.');
+        if (!ok) return;
+        try {
+          await window.api.deleteProjectDev(project, url);
+          if (card) card.remove();
+          showNotification('Image deleted', 'info');
+          // If grid empty after delete, show empty state
+          if (!grid.querySelector('.dev-card')) {
+            grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No development updates yet.</div>';
+          }
+        } catch (err) {
+          console.error('Delete failed:', err);
+          showNotification('Failed to delete image', 'error');
+        }
+      });
+    });
+  } catch (e) {
+    console.warn('Failed to load project development images', e);
+    grid.innerHTML = '<div class="text-center w-100 py-4 text-danger">Failed to load. Try again.</div>';
+  }
+}
+
+function openProjectDevViewerModal() {
+  ensureProjectDevStyles();
+  const project = document.querySelector('#projectSelect')?.value;
+  if (!project) { showNotification('Please select a project first', 'error'); return; }
+  if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+
+  let modalEl = document.getElementById('projectDevViewerModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.id = 'projectDevViewerModal';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Project Development Updates</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="projectDevGrid" class="row g-3"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modalEl);
+  }
+
+  const grid = modalEl.querySelector('#projectDevGrid');
+  renderProjectDevGrid(grid, project);
+
+  if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+    new bootstrap.Modal(modalEl).show();
+  } else {
+    modalEl.style.display = 'block';
+  }
+}
+
+// Hook menu item for viewer
+(function hookProjectDevViewer() {
+  const link = document.getElementById('viewProjectDevUpdates');
+  if (!link) return;
+  link.addEventListener('click', e => { e.preventDefault(); openProjectDevViewerModal(); });
+})();

@@ -203,6 +203,121 @@ class API {
     }
   }
 
+  // Storage: upload project development image and record in project_dev table
+  // Table columns: image_link (text), user_id (uuid), project_name (text)
+  async uploadProjectDevelopment(file, projectName) {
+    if (!this.supabase) throw new Error('Supabase not configured');
+    const { data: userData, error: authErr } = await this.supabase.auth.getUser();
+    if (authErr || !userData?.user) throw new Error('Not authenticated');
+    const userId = userData.user.id;
+
+    const safeName = (file?.name || 'image').replace(/[^A-Za-z0-9_.-]/g, '_');
+    const path = `${userId}/${projectName}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+    const bucket = this.supabase.storage.from('project_deve_updates');
+
+    const { error: upErr } = await bucket.upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+    if (upErr) throw upErr;
+
+    let url = null;
+    try { url = bucket.getPublicUrl(path)?.data?.publicUrl || null; } catch {}
+    if (!url) {
+      const { data: signed, error: sErr } = await bucket.createSignedUrl(path, 60 * 60 * 24 * 7);
+      if (sErr) throw sErr;
+      url = signed?.signedUrl || null;
+    }
+
+    const payload = { image_link: url, user_id: userId, project_name: projectName };
+    const { data: rec, error: dbErr } = await this.supabase
+      .from('project_dev')
+      .insert(payload)
+      .select('id')
+      .maybeSingle();
+    if (dbErr) {
+      try { await bucket.remove([path]); } catch {}
+      throw dbErr;
+    }
+    return { url, path, id: rec?.id };
+  }
+
+  async uploadProjectDevelopmentBatch(files = [], projectName) {
+    if (!Array.isArray(files)) files = Array.from(files || []);
+    const results = [];
+    for (const f of files) {
+      // Skip non-images
+      if (!f || !f.type || !f.type.startsWith('image/')) continue;
+      const r = await this.uploadProjectDevelopment(f, projectName);
+      results.push(r);
+    }
+    return results;
+  }
+
+  // Parse bucket and path from a Supabase storage URL (public or signed)
+  _parseStorageRefFromUrl(url) {
+    try {
+      const u = new URL(url);
+      const parts = u.pathname.split('/').filter(Boolean);
+      // Expect .../storage/v1/object/(public|sign)/<bucket>/<path...>
+      const idx = parts.findIndex(p => p === 'object');
+      if (idx >= 0 && parts[idx + 1] && parts[idx + 2]) {
+        const bucket = parts[idx + 2];
+        const path = parts.slice(idx + 3).join('/');
+        return { bucket, path };
+      }
+    } catch {}
+    return { bucket: 'project_deve_updates', path: '' };
+  }
+
+  async getProjectDevImages(projectName) {
+    if (!this.supabase) return [];
+    // Try with a reasonable column set; fall back to * if schema differs
+    try {
+      let q = this.supabase
+        .from('project_dev')
+        .select('id, image_link, user_id, project_name, created_at')
+        .eq('project_name', projectName)
+        .order('created_at', { ascending: false });
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      try {
+        const { data } = await this.supabase
+          .from('project_dev')
+          .select('*')
+          .eq('project_name', projectName)
+          .order('id', { ascending: false });
+        return data || [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  async deleteProjectDev(projectName, imageLink) {
+    if (!this.supabase) throw new Error('Supabase not configured');
+    // Try remove from storage first (safer to leave DB if storage fails)
+    try {
+      const { bucket, path } = this._parseStorageRefFromUrl(imageLink || '');
+      if (bucket && path) {
+        const bucketRef = this.supabase.storage.from(bucket);
+        await bucketRef.remove([path]).catch(() => {});
+      }
+    } catch {}
+
+    // Then remove from table
+    try {
+      const { error } = await this.supabase
+        .from('project_dev')
+        .delete()
+        .eq('project_name', projectName)
+        .eq('image_link', imageLink);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      throw e;
+    }
+  }
+
   async getLatestMapUrl(projectCode, phaseSlug = 'default') {
     if (!this.supabase) return null;
     const projectId = await this._ensureProjectByCode(projectCode);
