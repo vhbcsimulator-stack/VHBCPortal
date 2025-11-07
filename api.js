@@ -322,12 +322,12 @@ class API {
     if (!this.supabase) return null;
     const projectId = await this._ensureProjectByCode(projectCode);
     const phaseId = projectCode === 'MVLC' ? await this._ensurePhase(projectId, phaseSlug, phaseSlug) : null;
-    let q = this.supabase.from('uploads').select('id, storage_path, mime_type, name, image_url').eq('project_id', projectId).eq('kind', 'map').order('uploaded_at', { ascending: false }).limit(1);
+    let q = this.supabase.from('uploads').select('id, storage_path, mime_type, name, image_URL').eq('project_id', projectId).eq('kind', 'map').order('uploaded_at', { ascending: false }).limit(1);
     if (phaseId) q = q.eq('phase_id', phaseId);
     const { data, error } = await q;
     if (error || !data || !data[0]) return null;
     // Prefer stored image_url if present
-    let url = data[0].image_url || null;
+    let url = data[0].image_URL || null;
     if (!url) {
       const path = data[0].storage_path;
       const bucketName = (projectCode || '').toLowerCase() === 'mvlc' ? 'mvlc' : 'maps';
