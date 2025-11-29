@@ -109,12 +109,20 @@ class API {
 
     const projectId = await this._ensureProjectByCode(projectCode);
     const phaseId = projectCode === 'MVLC' ? await this._ensurePhase(projectId, phaseSlug, phaseSlug.replace('-', ' ').toUpperCase()) : null;
+    let phaseNumber = null;
+    if ((projectCode || '').toUpperCase() === 'MVLC') {
+      const m = String(phaseSlug || '').match(/(\d+)/);
+      phaseNumber = m ? parseInt(m[1], 10) || null : null;
+    }
 
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
     const safeName = file.name.replace(/[^A-Za-z0-9_.-]/g, '_');
     const path = `${userId}/${projectCode}/${phaseSlug}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
     // For MVLC, store in dedicated 'mvlc' bucket. Others use 'maps'.
-    const bucketName = (projectCode || '').toLowerCase() === 'mvlc' ? 'mvlc' : 'maps';
+    const normalizedCode = (projectCode || '').toLowerCase();
+    const bucketName = normalizedCode === 'mvlc' ? 'mvlc'
+      : normalizedCode === 'erhd' ? 'erhd'
+      : 'maps';
     const bucket = this.supabase.storage.from(bucketName);
     const { error: upErr } = await bucket.upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
     if (upErr) throw upErr;
@@ -162,6 +170,7 @@ class API {
           project: projectCode,
           image_URL: publicUrl,
           current: true,
+          phase: phaseNumber,
           user_id: userId || null,
           uploaded_at: new Date().toISOString()
         })
@@ -190,6 +199,7 @@ class API {
           project: projectCode,
           image_URL: publicUrl,
           current: true,
+          phase: phaseNumber,
           user_id: userId || null
         })
         .select('id')
@@ -211,8 +221,10 @@ class API {
     if (authErr || !userData?.user) throw new Error('Not authenticated');
     const userId = userData.user.id;
 
+    // Force ERHD project naming while reusing the shared bucket
+    const projectFixed = 'ERHD';
     const safeName = (file?.name || 'image').replace(/[^A-Za-z0-9_.-]/g, '_');
-    const path = `${userId}/${projectName}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+    const path = `${userId}/${projectFixed}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
     const bucket = this.supabase.storage.from('project_deve_updates');
 
     const { error: upErr } = await bucket.upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
@@ -226,7 +238,7 @@ class API {
       url = signed?.signedUrl || null;
     }
 
-    const payload = { image_link: url, user_id: userId, project_name: projectName };
+    const payload = { image_link: url, user_id: userId, project_name: projectFixed };
     const { data: rec, error: dbErr } = await this.supabase
       .from('project_dev')
       .insert(payload)
@@ -245,7 +257,56 @@ class API {
     for (const f of files) {
       // Skip non-images
       if (!f || !f.type || !f.type.startsWith('image/')) continue;
-      const r = await this.uploadProjectDevelopment(f, projectName);
+      const r = await this.uploadProjectDevelopment(f, 'ERHD');
+      results.push(r);
+    }
+    return results;
+  }
+
+  // Storage: upload future development image and record in future_dev table
+  // Table columns: image_link (text), user_id (uuid), project_name (text)
+  async uploadFutureDevelopment(file, projectName) {
+    if (!this.supabase) throw new Error('Supabase not configured');
+    const { data: userData, error: authErr } = await this.supabase.auth.getUser();
+    if (authErr || !userData?.user) throw new Error('Not authenticated');
+    const userId = userData.user.id;
+
+    // Force ERHD for future development uploads
+    const projectFixed = 'ERHD';
+    const safeName = (file?.name || 'image').replace(/[^A-Za-z0-9_.-]/g, '_');
+    const path = `${userId}/${projectFixed}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+    const bucket = this.supabase.storage.from('future_dev');
+
+    const { error: upErr } = await bucket.upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+    if (upErr) throw upErr;
+
+    let url = null;
+    try { url = bucket.getPublicUrl(path)?.data?.publicUrl || null; } catch {}
+    if (!url) {
+      const { data: signed, error: sErr } = await bucket.createSignedUrl(path, 60 * 60 * 24 * 7);
+      if (sErr) throw sErr;
+      url = signed?.signedUrl || null;
+    }
+
+    const payload = { image_link: url, user_id: userId, project_name: projectFixed };
+    const { data: rec, error: dbErr } = await this.supabase
+      .from('future_dev')
+      .insert(payload)
+      .select('id')
+      .maybeSingle();
+    if (dbErr) {
+      try { await bucket.remove([path]); } catch {}
+      throw dbErr;
+    }
+    return { url, path, id: rec?.id };
+  }
+
+  async uploadFutureDevelopmentBatch(files = [], projectName) {
+    if (!Array.isArray(files)) files = Array.from(files || []);
+    const results = [];
+    for (const f of files) {
+      if (!f || !f.type || !f.type.startsWith('image/')) continue;
+      const r = await this.uploadFutureDevelopment(f, 'ERHD');
       results.push(r);
     }
     return results;
@@ -293,6 +354,30 @@ class API {
     }
   }
 
+  async getFutureDevImages(projectName) {
+    if (!this.supabase) return [];
+    try {
+      const { data, error } = await this.supabase
+        .from('future_dev')
+        .select('id, image_link, user_id, project_name, created_at')
+        .eq('project_name', projectName)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      try {
+        const { data } = await this.supabase
+          .from('future_dev')
+          .select('*')
+          .eq('project_name', projectName)
+          .order('id', { ascending: false });
+        return data || [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
   async deleteProjectDev(projectName, imageLink) {
     if (!this.supabase) throw new Error('Supabase not configured');
     // Try remove from storage first (safer to leave DB if storage fails)
@@ -318,19 +403,61 @@ class API {
     }
   }
 
+  async deleteFutureDev(projectName, imageLink) {
+    if (!this.supabase) throw new Error('Supabase not configured');
+    try {
+      const { bucket, path } = this._parseStorageRefFromUrl(imageLink || '');
+      if (bucket && path) {
+        const bucketRef = this.supabase.storage.from(bucket);
+        await bucketRef.remove([path]).catch(() => {});
+      }
+    } catch {}
+
+    try {
+      const { error } = await this.supabase
+        .from('future_dev')
+        .delete()
+        .eq('project_name', projectName)
+        .eq('image_link', imageLink);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      throw e;
+    }
+  }
+
   async getLatestMapUrl(projectCode, phaseSlug = 'default') {
     if (!this.supabase) return null;
     const projectId = await this._ensureProjectByCode(projectCode);
     const phaseId = projectCode === 'MVLC' ? await this._ensurePhase(projectId, phaseSlug, phaseSlug) : null;
-    let q = this.supabase.from('uploads').select('id, storage_path, mime_type, name, image_URL').eq('project_id', projectId).eq('kind', 'map').order('uploaded_at', { ascending: false }).limit(1);
-    if (phaseId) q = q.eq('phase_id', phaseId);
+    let phaseNumber = null;
+    if ((projectCode || '').toUpperCase() === 'MVLC') {
+      const m = String(phaseSlug || '').match(/(\d+)/);
+      phaseNumber = m ? parseInt(m[1], 10) || null : null;
+    }
+
+    let q = this.supabase
+      .from('uploads')
+      .select('id, storage_path, mime_type, name, image_URL')
+      .eq('project_id', projectId)
+      .eq('kind', 'map')
+      .order('uploaded_at', { ascending: false })
+      .limit(1);
+    if (phaseId) {
+      q = q.eq('phase_id', phaseId);
+    } else if (phaseNumber != null) {
+      q = q.eq('phase', phaseNumber);
+    }
     const { data, error } = await q;
     if (error || !data || !data[0]) return null;
     // Prefer stored image_url if present
     let url = data[0].image_URL || null;
     if (!url) {
       const path = data[0].storage_path;
-      const bucketName = (projectCode || '').toLowerCase() === 'mvlc' ? 'mvlc' : 'maps';
+      const normalizedCode = (projectCode || '').toLowerCase();
+      const bucketName = normalizedCode === 'mvlc' ? 'mvlc'
+        : normalizedCode === 'erhd' ? 'erhd'
+        : 'maps';
       const bucket = this.supabase.storage.from(bucketName);
       try { url = bucket.getPublicUrl(path)?.data?.publicUrl || null; } catch {}
       if (!url) {
@@ -444,6 +571,48 @@ class API {
     if (scope === 'phase3') { await upsertForPhase(3); return { phase: 3 }; }
     if (scope === 'phase13') { await upsertForPhase(1); await upsertForPhase(3); return { phase: [1,3] }; }
     await upsertForPhase(2); return { phase: 2 };
+  }
+
+  // ERHD price management (single-row table)
+  async getERHDPrices() {
+    if (!this.supabase) return null;
+    const { data, error } = await this.supabase
+      .from('erhd_price')
+      .select('id, regular, prime, prime_corner')
+      .order('id', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return (data && data[0]) ? data[0] : null;
+  }
+
+  async setERHDPrices({ regular = null, prime = null, prime_corner = null } = {}) {
+    if (!this.supabase) throw new Error('Supabase not configured');
+    const existing = await this.getERHDPrices().catch(() => null);
+    const payload = { regular, prime, prime_corner };
+    try {
+      const { data: u } = await this.supabase.auth.getUser();
+      const uid = u?.user?.id || null;
+      if (uid) payload.user_id = uid;
+    } catch {}
+
+    if (existing && existing.id) {
+      const { data, error } = await this.supabase
+        .from('erhd_price')
+        .update(payload)
+        .eq('id', existing.id)
+        .select('id, regular, prime, prime_corner')
+        .maybeSingle();
+      if (error) throw error;
+      return data || existing;
+    } else {
+      const { data, error } = await this.supabase
+        .from('erhd_price')
+        .insert(payload)
+        .select('id, regular, prime, prime_corner')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    }
   }
 
   // MVLC Phase 1 & 3 price management (separate table)
@@ -623,6 +792,8 @@ class API {
 
   // Lots: fetch rows for display
   async getLots(projectCode = null) {
+    // Lots table is MVLC-only
+    if ((projectCode || '').toUpperCase() !== 'MVLC') return [];
     if (!this.supabase) return [];
     const PAGE = 1000;
     const selectCols = 'lot_no, phase, size_sqm, price_per_sqm, total, category, status, last_updated';
@@ -680,6 +851,7 @@ class API {
   // Table columns: lot_no, phase, size_sqm, price_per_sqm, total, category, status, last_updated, user_id
   // Expects items: { lotNumber, phase, size, category, status, lastUpdated }
   async saveLots(projectCode, items = []) {
+    if ((projectCode || '').toUpperCase() !== 'MVLC') throw new Error('Lots table is MVLC-only');
     if (!this.supabase) throw new Error('Supabase not configured');
     if (!Array.isArray(items) || !items.length) return { inserted: 0 };
     let user_id = null;
@@ -770,11 +942,11 @@ class API {
     for (const r of rows) {
       if (!r.lot_no) continue; // skip invalid
       // Try update existing row
+      // `total` is a computed/generated column in Supabase, so omit it from mutations
       const updatePayload = {
         phase: r.phase,
         size_sqm: r.size_sqm,
         price_per_sqm: r.price_per_sqm,
-        total: r.total,
         category: r.category,
         status: r.status,
         last_updated: r.last_updated,
@@ -789,7 +961,8 @@ class API {
         continue;
       }
       // Insert new row
-      const { error: insErr } = await this.supabase.from('lots').insert(r);
+      const { total: _total, ...insertPayload } = r;
+      const { error: insErr } = await this.supabase.from('lots').insert(insertPayload);
       if (insErr) throw insErr;
       inserted += 1;
     }
@@ -798,6 +971,7 @@ class API {
 
   // Lots: delete rows for a project
   async clearLots(projectCode) {
+    if ((projectCode || '').toUpperCase() !== 'MVLC') throw new Error('Lots table is MVLC-only');
     if (!this.supabase) throw new Error('Supabase not configured');
     // Table is MVLC-only; delete all rows
     let q = this.supabase.from('lots').delete();

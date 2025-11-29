@@ -595,7 +595,7 @@ async function handleImportCsvSelected(e) {
       }
     }
     setInventory(project, merged);
-    showNotification(`Imported ${lots.length} rows for ${project} — updated ${updatedLocal}, added ${insertedLocal}`, 'info');
+    showNotification(`Imported ${lots.length} rows for ${project} â€” updated ${updatedLocal}, added ${insertedLocal}`, 'info');
 
     // Save to Supabase 'lots' table if available and authenticated
     try {
@@ -604,7 +604,7 @@ async function handleImportCsvSelected(e) {
         if (!error && u?.user && typeof window.api.saveLots === 'function') {
           const res = await window.api.saveLots(project, lots);
           if (res && typeof res === 'object') {
-            showNotification(`Database upsert complete — updated ${res.updated || 0}, inserted ${res.inserted || 0}`, 'info');
+            showNotification(`Database upsert complete â€” updated ${res.updated || 0}, inserted ${res.inserted || 0}`, 'info');
           } else {
             showNotification('Lots saved to database', 'info');
           }
@@ -713,45 +713,57 @@ function handleMapSelected(e) {
 function loadMapPreviewForPhase(phase) {
   const project = $('#projectSelect')?.value || 'default';
   const keyBase = `vhbc_map_${project}_${phase}`;
-  const dataUrl = localStorage.getItem(`${keyBase}_dataurl`);
-  const name = localStorage.getItem(`${keyBase}_name`) || `${project} ${phase}`;
-  const type = localStorage.getItem(`${keyBase}_type`) || '';
+  let dataUrl = localStorage.getItem(`${keyBase}_dataurl`);
+  let name = localStorage.getItem(`${keyBase}_name`) || `${project} ${phase}`;
+  let type = localStorage.getItem(`${keyBase}_type`) || '';
 
   const img = $('#mapModalImage');
   const embed = $('#mapModalEmbed');
 
-  if (!dataUrl) {
-    // Try fetch latest from DB
-    if (window.api && window.api.supabase) {
-      (async () => {
-        const latest = await window.api.getLatestMapUrl(project, phase);
-        if (latest?.url) {
-          const url = latest.url;
-          const t = latest.type || '';
-          if (img) { img.src = url; img.style.display = t === 'application/pdf' ? 'none' : 'block'; }
-          if (embed) { embed.src = url; embed.style.display = t === 'application/pdf' ? 'block' : 'none'; }
-          const title = $('#mapModal .modal-title');
-          if (title) title.textContent = `${project} - ${latest.name || (project + ' ' + phase)}`;
-          // cache locally for faster next open
-          try {
-            localStorage.setItem(`${keyBase}_dataurl`, url);
-            localStorage.setItem(`${keyBase}_name`, latest.name || `${project} ${phase}`);
-            localStorage.setItem(`${keyBase}_type`, t);
-          } catch {}
-          return;
-        }
-        if (img) img.style.display = 'none';
-        if (embed) embed.style.display = 'none';
-        showNotification(`No map uploaded for ${project} ${phase}`, 'info');
-      })();
-      return;
-    } else {
+  const applySource = (src, mime, label) => {
+    const isPdf = mime === 'application/pdf' || (src && src.toLowerCase().endsWith('.pdf'));
+    if (img) { img.src = src; img.style.display = isPdf ? 'none' : 'block'; }
+    if (embed) { embed.src = src; embed.style.display = isPdf ? 'block' : 'none'; }
+    const title = $('#mapModal .modal-title');
+    if (title) title.textContent = `${project} - ${label}`;
+  };
+
+  const fetchLatestFromSupabase = async () => {
+    if (!window.api || !window.api.supabase) return false;
+    try {
+      const latest = await window.api.getLatestMapUrl(project, phase);
+      if (latest?.url) {
+        const url = latest.url;
+        const t = latest.type || '';
+        const label = latest.name || `${project} ${phase}`;
+        applySource(url, t, label);
+        try {
+          localStorage.setItem(`${keyBase}_dataurl`, url);
+          localStorage.setItem(`${keyBase}_name`, label);
+          localStorage.setItem(`${keyBase}_type`, t);
+        } catch {}
+        return true;
+      }
+    } catch (err) {
+      console.warn('Failed fetching map from Supabase:', err);
+    }
+    return false;
+  };
+
+  if (dataUrl) {
+    applySource(dataUrl, type, name);
+    // Refresh from Supabase to avoid stale/expired URLs
+    fetchLatestFromSupabase();
+    return;
+  }
+
+  fetchLatestFromSupabase().then(found => {
+    if (!found) {
       if (img) img.style.display = 'none';
       if (embed) embed.style.display = 'none';
       showNotification(`No map uploaded for ${project} ${phase}`, 'info');
-      return;
     }
-  }
+  });
 
   if (img) { img.src = dataUrl; img.style.display = type === 'application/pdf' ? 'none' : 'block'; }
   if (embed) { embed.src = dataUrl; embed.style.display = type === 'application/pdf' ? 'block' : 'none'; }
@@ -922,14 +934,12 @@ function setupEventListeners() {
   const openPriceModalBtn = $('#openPriceModal');
   if (openPriceModalBtn) {
     openPriceModalBtn.addEventListener('click', () => {
-      const project = $('#projectSelect')?.value || 'MVLC';
-      const lots = getInventory(project);
-      let categories = Array.from(new Set(lots.map(l => (l.category || '').trim()).filter(Boolean)));
-      if (!categories.length) {
-        categories = project === 'MVLC'
-          ? ['Regular', 'Regular Corner', 'Prime', 'Prime Corner']
-          : ['Premium', 'Standard'];
-      }
+        const project = $('#projectSelect')?.value || 'MVLC';
+        const lots = getInventory(project);
+        let categories = Array.from(new Set(lots.map(l => (l.category || '').trim()).filter(Boolean)));
+        if (!categories.length) {
+          categories = ['Regular', 'Prime', 'Prime Corner'];
+        }
 
       // MVLC: show phase group choice and adapt categories
       const phaseGroupWrap = document.getElementById('pricePhaseGroup');
@@ -948,37 +958,38 @@ function setupEventListeners() {
         return sel ? sel.value : 'phase2';
       };
 
-      const categoriesFor = (proj, scope) => {
-        if (proj === 'MVLC') {
-          if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
-          return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
-        }
-        return categories; // non-MVLC
-      };
+        const categoriesFor = (proj, scope) => {
+          if (proj === 'MVLC') {
+            if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
+            return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
+          }
+          if (proj === 'ERHD') return ['Regular', 'Prime', 'Prime Corner'];
+          return ['Regular', 'Prime', 'Prime Corner'];
+        };
 
-      const renderForm = async () => {
-        const scope = currentScope();
-        const localMap = getPriceMap(project, scope);
-      // Prefill from server if MVLC (single table with phase column)
-        if (project === 'MVLC' && window.api && window.api.supabase && typeof window.api.getMVLCPricesByScope === 'function' && await hasSupabaseSession()) {
-          try {
-            const srv = await window.api.getMVLCPricesByScope(scope);
-            if (srv) {
-              if (srv.regular != null) localMap['regular'] = srv.regular;
-              if (srv.prime != null) localMap['prime'] = srv.prime;
-              if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
-              if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
-              if (srv.commercial != null) localMap['commercial'] = srv.commercial;
-              if (srv.commercial_corner != null) localMap['commercial corner'] = srv.commercial_corner;
-            }
-          } catch {}
-        }
-        const body = document.getElementById('priceFormBody');
-        if (body) {
-          const cats = categoriesFor(project, scope);
-          body.innerHTML = cats.map(cat => {
-            const key = (cat || '').toLowerCase();
-            const val = localMap && localMap[key] != null ? localMap[key] : '';
+        const renderForm = async () => {
+          const scope = currentScope();
+          const localMap = getPriceMap(project, scope);
+        // Prefill from server if MVLC (single table with phase column)
+          if (project === 'MVLC' && window.api && window.api.supabase && typeof window.api.getMVLCPricesByScope === 'function' && await hasSupabaseSession()) {
+            try {
+              const srv = await window.api.getMVLCPricesByScope(scope);
+              if (srv) {
+                if (srv.regular != null) localMap['regular'] = srv.regular;
+                if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
+                if (srv.prime != null) localMap['prime'] = srv.prime;
+                if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
+                if (srv.commercial != null) localMap['commercial'] = srv.commercial;
+                if (srv.commercial_corner != null) localMap['commercial corner'] = srv.commercial_corner;
+              }
+            } catch {}
+          }
+          const body = document.getElementById('priceFormBody');
+          if (body) {
+            const cats = categoriesFor(project, scope);
+            body.innerHTML = cats.map(cat => {
+              const key = (cat || '').toLowerCase();
+              const val = localMap && localMap[key] != null ? localMap[key] : '';
             return `
               <div class="row g-2 align-items-center">
                 <div class="col-6"><label class="form-label mb-0">${cat}</label></div>
@@ -1042,27 +1053,34 @@ function setupEventListeners() {
         }
       };
 
-      if (project === 'MVLC' && window.api && window.api.supabase) {
+      if ((project === 'MVLC' || project === 'ERHD') && window.api && window.api.supabase) {
         (async () => {
-          try {
-            if (!(await hasSupabaseSession())) {
-              finish('Not logged in. Prices saved locally.');
-              return;
-            }
-            if (typeof window.api.setMVLCPricesByScope === 'function') {
+            try {
+              if (!(await hasSupabaseSession())) {
+                finish('Not logged in. Prices saved locally.');
+                return;
+              }
+            if (project === 'MVLC' && typeof window.api.setMVLCPricesByScope === 'function') {
               const payload = {
                 regular: map['regular'] ?? null,
-                prime: map['prime'] ?? null,
                 regular_corner: map['regular corner'] ?? null,
+                prime: map['prime'] ?? null,
                 prime_corner: map['prime corner'] ?? null,
                 commercial: map['commercial'] ?? null,
                 commercial_corner: map['commercial corner'] ?? null,
               };
               await window.api.setMVLCPricesByScope(scope, payload);
+            } else if (project === 'ERHD' && typeof window.api.setERHDPrices === 'function') {
+              const payload = {
+                regular: map['regular'] ?? null,
+                prime: map['prime'] ?? null,
+                prime_corner: map['prime corner'] ?? null,
+              };
+              await window.api.setERHDPrices(payload);
             }
             finish('Category prices updated and synced');
           } catch (err) {
-            console.warn('Failed syncing MVLC prices to server:', err);
+            console.warn('Failed syncing prices to server:', err);
             finish('Category prices updated (local only)');
           }
         })();
@@ -1104,18 +1122,27 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---- Project Development Upload (Drag & Drop, multiple, no save) ----
 function ensureProjectDevStyles() {
   if (document.getElementById('projectDevUploadStyles')) return;
-  const css = `
-    #projectDevDropzone { border-style: dashed !important; cursor: pointer; }
-    #projectDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
-    #projectDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
-    #projectDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
-    #projectDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
-    /* Viewer styles */
-    #projectDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
-    #projectDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
-    #projectDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
-    #projectDevGrid .dev-card:hover .delete-btn { opacity: 1; }
-  `;
+    const css = `
+      #projectDevDropzone,
+      #futureDevDropzone { border-style: dashed !important; cursor: pointer; }
+      #projectDevDropzone.dragover,
+      #futureDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
+      #projectDevPreview .preview-item img,
+      #futureDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
+      #projectDevPreview .preview-item .meta,
+      #futureDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
+      #projectDevPreview .remove-btn,
+      #futureDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
+      /* Viewer styles */
+      #projectDevGrid .dev-card,
+      #futureDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
+      #projectDevGrid .dev-card img,
+      #futureDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
+      #projectDevGrid .dev-card .delete-btn,
+      #futureDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
+      #projectDevGrid .dev-card:hover .delete-btn,
+      #futureDevGrid .dev-card:hover .delete-btn { opacity: 1; }
+    `;
   const style = document.createElement('style');
   style.id = 'projectDevUploadStyles';
   style.textContent = css;
@@ -1130,143 +1157,173 @@ function bytesToSize(bytes) {
   return `${val} ${sizes[i]}`;
 }
 
-function openProjectDevUploadModal() {
-  ensureProjectDevStyles();
+const devUploadModals = {};
 
-  let modalEl = document.getElementById('projectDevUploadModal');
-  if (!modalEl) {
-    modalEl = document.createElement('div');
-    modalEl.className = 'modal fade';
-    modalEl.id = 'projectDevUploadModal';
-    modalEl.tabIndex = -1;
-    modalEl.setAttribute('aria-hidden', 'true');
-    modalEl.innerHTML = `
+function createDevUploadModal({ prefix, title, uploadFn, logLabel }) {
+  const ids = {
+    modal: `${prefix}UploadModal`,
+    dropzone: `${prefix}Dropzone`,
+    fileInput: `${prefix}FileInput`,
+    preview: `${prefix}Preview`,
+    clearBtn: `${prefix}ClearBtn`,
+    uploadBtn: `${prefix}UploadBtn`,
+  };
+
+  const modalEl = document.createElement('div');
+  modalEl.className = 'modal fade';
+  modalEl.id = ids.modal;
+  modalEl.tabIndex = -1;
+  modalEl.setAttribute('aria-hidden', 'true');
+  modalEl.innerHTML = `
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Upload Project Development Images</h5>
+            <h5 class="modal-title">${title}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div id="projectDevDropzone" class="border border-2 border-secondary rounded-3 p-5 text-center">
+            <div id="${ids.dropzone}" class="border border-2 border-secondary rounded-3 p-5 text-center">
               <i class="fas fa-images fa-2x mb-3 text-secondary"></i>
               <p class="mb-1">Drag and drop images here</p>
               <p class="text-muted small">or click to browse</p>
             </div>
-            <input type="file" id="projectDevFileInput" accept="image/*" multiple style="display:none">
-            <div id="projectDevPreview" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
+            <input type="file" id="${ids.fileInput}" accept="image/*" multiple style="display:none">
+            <div id="${ids.preview}" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
           </div>
           <div class="modal-footer">
-            <button type="button" id="projectDevClearBtn" class="btn btn-outline-secondary">Clear</button>
-            <button type="button" id="projectDevUploadBtn" class="btn btn-primary">Upload</button>
+            <button type="button" id="${ids.clearBtn}" class="btn btn-outline-secondary">Clear</button>
+            <button type="button" id="${ids.uploadBtn}" class="btn btn-primary">Upload</button>
           </div>
         </div>
       </div>`;
-    document.body.appendChild(modalEl);
+  document.body.appendChild(modalEl);
 
-    const dropzone = modalEl.querySelector('#projectDevDropzone');
-    const fileInput = modalEl.querySelector('#projectDevFileInput');
-    const preview = modalEl.querySelector('#projectDevPreview');
-    const clearBtn = modalEl.querySelector('#projectDevClearBtn');
-    const uploadBtn = modalEl.querySelector('#projectDevUploadBtn');
+  const dropzone = modalEl.querySelector(`#${ids.dropzone}`);
+  const fileInput = modalEl.querySelector(`#${ids.fileInput}`);
+  const preview = modalEl.querySelector(`#${ids.preview}`);
+  const clearBtn = modalEl.querySelector(`#${ids.clearBtn}`);
+  const uploadBtn = modalEl.querySelector(`#${ids.uploadBtn}`);
 
-    let selected = [];
+  let selected = [];
 
-    function renderPreview() {
-      preview.innerHTML = selected.map((item, idx) => {
-        const name = item.file.name;
-        const size = bytesToSize(item.file.size);
-        const url = item.url;
-        return `
+  function renderPreview() {
+    preview.innerHTML = selected.map((item, idx) => {
+      const name = item.file.name;
+      const size = bytesToSize(item.file.size);
+      const url = item.url;
+      return `
           <div class="col">
             <div class="position-relative preview-item">
-              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">✕</button>
+              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">&times;</button>
               <img src="${url}" alt="${name}">
-              <div class="meta mt-1 text-truncate" title="${name}">${name} • ${size}</div>
+              <div class="meta mt-1 text-truncate" title="${name}">${name} - ${size}</div>
             </div>
           </div>`;
-      }).join('');
+    }).join('');
 
-      preview.querySelectorAll('.remove-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const i = parseInt(btn.getAttribute('data-idx'), 10);
-          if (!isNaN(i) && selected[i]) {
-            URL.revokeObjectURL(selected[i].url);
-            selected.splice(i, 1);
-            renderPreview();
-          }
-        });
-      });
-    }
-
-    function addFiles(fileList) {
-      const files = Array.from(fileList || []);
-      const imgs = files.filter(f => f.type && f.type.startsWith('image/'));
-      imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
-      renderPreview();
-    }
-
-    dropzone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => addFiles(fileInput.files));
-
-    ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
-      e.preventDefault(); e.stopPropagation();
-      dropzone.classList.add('dragover');
-    }));
-    ['dragleave','dragend','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
-      e.preventDefault(); e.stopPropagation();
-      dropzone.classList.remove('dragover');
-    }));
-    dropzone.addEventListener('drop', e => {
-      addFiles(e.dataTransfer?.files || []);
-    });
-
-    clearBtn.addEventListener('click', () => {
-      selected.forEach(it => URL.revokeObjectURL(it.url));
-      selected = [];
-      fileInput.value = '';
-      renderPreview();
-    });
-
-    uploadBtn.addEventListener('click', async () => {
-      const proj = document.querySelector('#projectSelect')?.value;
-      if (!proj) { showNotification('Please select a project first', 'error'); return; }
-      if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
-      if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
-      try {
-        const hasSession = await hasSupabaseSession();
-        if (!hasSession) { showNotification('Not logged in', 'error'); return; }
-      } catch { showNotification('Auth check failed', 'error'); return; }
-
-      uploadBtn.disabled = true;
-      uploadBtn.textContent = 'Uploading...';
-      try {
-        const files = selected.map(s => s.file);
-        const results = await window.api.uploadProjectDevelopmentBatch(files, proj);
-        const ok = (results || []).length;
-        showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
-        // Reset and close modal
-        clearBtn.click();
-        if (window.bootstrap && typeof bootstrap.Modal === 'function') {
-          bootstrap.Modal.getInstance(modalEl)?.hide();
-        } else {
-          modalEl.style.display = 'none';
+    preview.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.getAttribute('data-idx'), 10);
+        if (!isNaN(i) && selected[i]) {
+          URL.revokeObjectURL(selected[i].url);
+          selected.splice(i, 1);
+          renderPreview();
         }
-      } catch (err) {
-        console.error('Upload failed:', err);
-        showNotification('Failed to upload images', 'error');
-      } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = 'Upload';
-      }
+      });
     });
   }
 
+  function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    const imgs = files.filter(f => f.type && f.type.startsWith('image/'));
+    imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
+    renderPreview();
+  }
+
+  const stopEvents = e => { e.preventDefault(); e.stopPropagation(); };
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+  ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+    stopEvents(e);
+    dropzone.classList.add('dragover');
+  }));
+  ['dragleave','dragend'].forEach(evt => dropzone.addEventListener(evt, e => {
+    stopEvents(e);
+    dropzone.classList.remove('dragover');
+  }));
+  dropzone.addEventListener('drop', e => {
+    stopEvents(e);
+    dropzone.classList.remove('dragover');
+    addFiles(e.dataTransfer?.files || []);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    selected.forEach(it => URL.revokeObjectURL(it.url));
+    selected = [];
+    fileInput.value = '';
+    renderPreview();
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    const proj = document.querySelector('#projectSelect')?.value;
+    if (!proj) { showNotification('Please select a project first', 'error'); return; }
+    if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
+    if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+    try {
+      const hasSession = await hasSupabaseSession();
+      if (!hasSession) { showNotification('Not logged in', 'error'); return; }
+    } catch {
+      showNotification('Auth check failed', 'error');
+      return;
+    }
+
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Uploading...';
+    try {
+      const files = selected.map(s => s.file);
+      const results = await uploadFn(files, proj);
+      const ok = (results || []).length;
+      showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
+      clearBtn.click();
+      if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+        bootstrap.Modal.getInstance(modalEl)?.hide();
+      } else {
+        modalEl.style.display = 'none';
+      }
+    } catch (err) {
+      console.error(`${logLabel} upload failed:`, err);
+      showNotification('Failed to upload images', 'error');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Upload';
+    }
+  });
+
+  return modalEl;
+}
+
+function openDevUploadModal(config) {
+  ensureProjectDevStyles();
+  if (!devUploadModals[config.prefix]) {
+    devUploadModals[config.prefix] = createDevUploadModal(config);
+  }
+  const modalEl = devUploadModals[config.prefix];
   if (window.bootstrap && typeof bootstrap.Modal === 'function') {
     new bootstrap.Modal(modalEl).show();
   } else {
     modalEl.style.display = 'block';
   }
+}
+
+function openProjectDevUploadModal() {
+  openDevUploadModal({
+    prefix: 'projectDev',
+    title: 'Upload Project Development Images',
+    uploadFn: (files, project) => window.api.uploadProjectDevelopmentBatch(files, project),
+    logLabel: 'Project development',
+  });
 }
 
 // Hook the menu item
@@ -1276,9 +1333,24 @@ function openProjectDevUploadModal() {
   link.addEventListener('click', ev => { ev.preventDefault(); openProjectDevUploadModal(); });
 })();
 
-// ---- Viewer for Project Development Updates ----
-async function renderProjectDevGrid(grid, project) {
-  grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
+function openFutureDevUploadModal() {
+  openDevUploadModal({
+    prefix: 'futureDev',
+    title: 'Upload Future Development Images',
+    uploadFn: (files, project) => window.api.uploadFutureDevelopmentBatch(files, project),
+    logLabel: 'Future development',
+  });
+}
+
+(function hookFutureDevUpload() {
+  const link = document.getElementById('uploadFutureDev');
+  if (!link) return;
+  link.addEventListener('click', ev => { ev.preventDefault(); openFutureDevUploadModal(); });
+  })();
+  
+  // ---- Viewer for Project Development Updates ----
+  async function renderProjectDevGrid(grid, project) {
+    grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
   try {
     const items = (await window.api.getProjectDevImages(project)) || [];
     if (!items.length) {
@@ -1363,12 +1435,109 @@ function openProjectDevViewerModal() {
     new bootstrap.Modal(modalEl).show();
   } else {
     modalEl.style.display = 'block';
+    }
   }
-}
+  
+  // Hook menu item for viewer
+  (function hookProjectDevViewer() {
+    const link = document.getElementById('viewProjectDevUpdates');
+    if (!link) return;
+    link.addEventListener('click', e => { e.preventDefault(); openProjectDevViewerModal(); });
+  })();
 
-// Hook menu item for viewer
-(function hookProjectDevViewer() {
-  const link = document.getElementById('viewProjectDevUpdates');
-  if (!link) return;
-  link.addEventListener('click', e => { e.preventDefault(); openProjectDevViewerModal(); });
-})();
+  // ---- Viewer for Future Development ----
+  async function renderFutureDevGrid(grid, project) {
+    grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
+    try {
+      const items = (await window.api.getFutureDevImages(project)) || [];
+      if (!items.length) {
+        grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development updates yet.</div>';
+        return;
+      }
+      grid.innerHTML = items.map((it, idx) => {
+        const url = it.image_link || it.image_URL || it.url;
+        const id = it.id || idx;
+        const title = it.project_name || project;
+        return `
+          <div class="col-6 col-md-4 col-lg-3" data-id="${id}">
+            <div class="dev-card border">
+              <button type="button" class="btn btn-sm btn-danger delete-btn" title="Delete" data-url="${encodeURIComponent(url)}">Delete</button>
+              <img src="${url}" alt="${title}">
+            </div>
+          </div>`;
+      }).join('');
+  
+      grid.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const raw = btn.getAttribute('data-url') || '';
+          const url = decodeURIComponent(raw);
+          const card = btn.closest('[data-id]');
+          const ok = window.confirm('Delete this image? This cannot be undone.');
+          if (!ok) return;
+          try {
+            await window.api.deleteFutureDev(project, url);
+            if (card) card.remove();
+            showNotification('Image deleted', 'info');
+            if (!grid.querySelector('.dev-card')) {
+              grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development updates yet.</div>';
+            }
+          } catch (err) {
+            console.error('Delete failed:', err);
+            showNotification('Failed to delete image', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      console.error(err);
+      grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Unable to load future development updates.</div>';
+    }
+  }
+  
+  function openFutureDevViewerModal() {
+    ensureProjectDevStyles();
+    const project = document.querySelector('#projectSelect')?.value;
+    if (!project) { showNotification('Please select a project first', 'error'); return; }
+    if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+  
+    let modalEl = document.getElementById('futureDevViewerModal');
+    if (!modalEl) {
+      modalEl = document.createElement('div');
+      modalEl.className = 'modal fade';
+      modalEl.id = 'futureDevViewerModal';
+      modalEl.tabIndex = -1;
+      modalEl.setAttribute('aria-hidden', 'true');
+      modalEl.innerHTML = `
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Future Development Updates</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div id="futureDevGrid" class="row g-3"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(modalEl);
+    }
+  
+    const grid = modalEl.querySelector('#futureDevGrid');
+    renderFutureDevGrid(grid, project);
+  
+    if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+      new bootstrap.Modal(modalEl).show();
+    } else {
+      modalEl.style.display = 'block';
+    }
+  }
+  
+  (function hookFutureDevViewer() {
+    const link = document.getElementById('viewFutureDevUpdates');
+    if (!link) return;
+    link.addEventListener('click', e => { e.preventDefault(); openFutureDevViewerModal(); });
+  })();
+
+
