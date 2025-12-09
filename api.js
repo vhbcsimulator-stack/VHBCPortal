@@ -170,7 +170,7 @@ class API {
           project: projectCode,
           image_URL: publicUrl,
           current: true,
-          phase: phaseNumber,
+          Phase: phaseNumber,
           user_id: userId || null,
           uploaded_at: new Date().toISOString()
         })
@@ -199,7 +199,7 @@ class API {
           project: projectCode,
           image_URL: publicUrl,
           current: true,
-          phase: phaseNumber,
+          Phase: phaseNumber,
           user_id: userId || null
         })
         .select('id')
@@ -446,7 +446,7 @@ class API {
     if (phaseId) {
       q = q.eq('phase_id', phaseId);
     } else if (phaseNumber != null) {
-      q = q.eq('phase', phaseNumber);
+      q = q.eq('Phase', phaseNumber);
     }
     const { data, error } = await q;
     if (error || !data || !data[0]) return null;
@@ -523,11 +523,15 @@ class API {
     if (!this.supabase) return null;
     // Accept 'phase1' | 'phase2' | 'phase3' (and map 'phase13' to 'phase1' for backward calls)
     const phaseVal = scope === 'phase1' ? 1 : scope === 'phase3' ? 3 : 2;
-    const { data, error } = await this.supabase
+    const fetchWithColumns = async (cols) => this.supabase
       .from('mvlc_price')
-      .select('id, phase, regular, prime, regular_corner, prime_corner, commercial, commercial_corner, user_id')
+      .select(cols)
       .eq('phase', phaseVal)
       .maybeSingle();
+    let { data, error } = await fetchWithColumns('id, phase, regular, prime, regular_corner, prime_corner, commercial, commercial_corner, prime_commercial, prime_commercial_corner, user_id');
+    if (error && error.code === '42703') {
+      ({ data, error } = await fetchWithColumns('id, phase, regular, prime, regular_corner, prime_corner, commercial, commercial_corner, user_id'));
+    }
     if (error && error.code !== 'PGRST116') throw error; // ignore No rows
     return data || null;
   }
@@ -538,7 +542,9 @@ class API {
     regular_corner = null,
     prime_corner = null,
     commercial = null,
-    commercial_corner = null
+    commercial_corner = null,
+    prime_commercial = null,
+    prime_commercial_corner = null
   } = {}) {
     if (!this.supabase) throw new Error('Supabase not configured');
     const upsertForPhase = async (phaseVal) => {
@@ -547,23 +553,42 @@ class API {
         .select('id')
         .eq('phase', phaseVal)
         .maybeSingle();
-      const payload = { phase: phaseVal, regular, prime, regular_corner, prime_corner, commercial, commercial_corner };
+      let uid = null;
       try {
         const { data: u } = await this.supabase.auth.getUser();
-        const uid = u?.user?.id || null;
-        if (uid) payload.user_id = uid;
+        uid = u?.user?.id || null;
       } catch {}
-      if (existing && existing.data && existing.data.id) {
-        const { error } = await this.supabase
-          .from('mvlc_price')
-          .update(payload)
-          .eq('id', existing.data.id);
-        if (error) throw error;
-      } else {
-        const { error } = await this.supabase
-          .from('mvlc_price')
-          .insert(payload);
-        if (error) throw error;
+      const buildPayload = (includePrimeCommercial = true) => {
+        const payload = { phase: phaseVal, regular, prime, regular_corner, prime_corner, commercial, commercial_corner };
+        if (includePrimeCommercial) {
+          payload.prime_commercial = prime_commercial;
+          payload.prime_commercial_corner = prime_commercial_corner;
+        }
+        if (uid) payload.user_id = uid;
+        return payload;
+      };
+      const attemptUpsert = async (payload) => {
+        if (existing && existing.data && existing.data.id) {
+          const { error } = await this.supabase
+            .from('mvlc_price')
+            .update(payload)
+            .eq('id', existing.data.id);
+          if (error) throw error;
+        } else {
+          const { error } = await this.supabase
+            .from('mvlc_price')
+            .insert(payload);
+          if (error) throw error;
+        }
+      };
+      try {
+        await attemptUpsert(buildPayload(true));
+      } catch (err) {
+        if (err?.code === '42703') {
+          await attemptUpsert(buildPayload(false));
+        } else {
+          throw err;
+        }
       }
     };
     // Accept 'phase1' | 'phase2' | 'phase3' (and map 'phase13' to both 1 and 3 for backward calls)
@@ -863,6 +888,8 @@ class API {
       const v = norm(val);
       if (v === 'commercial' || v === 'c') return 'commercial';
       if (v === 'commercial corner' || v === 'commercial_corner' || v === 'cc') return 'commercial_corner';
+      if (v === 'prime commercial' || v === 'prime_commercial' || v === 'pmc') return 'prime_commercial';
+      if (v === 'prime commercial corner' || v === 'prime_commercial_corner' || v === 'pmcc') return 'prime_commercial_corner';
       if (v === 'prime' || v === 'p') return 'prime';
       if (v === 'prime corner' || v === 'prime_corner' || v === 'pc') return 'prime_corner';
       if (v === 'regular corner' || v === 'regular_corner' || v === 'rc') return 'regular_corner';

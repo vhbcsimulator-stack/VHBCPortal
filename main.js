@@ -148,6 +148,8 @@ function formatCategoryLabel(v) {
     'prime corner': 'Prime Corner',
     'commercial': 'Commercial',
     'commercial corner': 'Commercial Corner',
+    'prime commercial': 'Prime Commercial',
+    'prime commercial corner': 'Prime Commercial Corner',
     'premium': 'Premium',
     'standard': 'Standard'
   };
@@ -249,6 +251,9 @@ function handleSearch(e) {
   if (document.body.getAttribute('data-page') === 'projects') {
     renderInventoryTable();
   }
+  if (document.body.getAttribute('data-page') === 'announcements') {
+    renderAnnouncementsGrid();
+  }
 }
 function handleFilter(e) {
   if (e.target.dataset.filterType === 'project') {
@@ -257,6 +262,122 @@ function handleFilter(e) {
   // Re-render inventory when any filter changes
   if (document.body.getAttribute('data-page') === 'projects') {
     renderInventoryTable();
+  }
+}
+
+// Announcements helpers
+let announcementsCache = [];
+
+function announcementDateValue(a) {
+  const candidates = [a?.created_at, a?.date, a?.date_posted, a?.createdAt];
+  for (const d of candidates) {
+    if (!d) continue;
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function formatAnnouncementDate(a) {
+  try { return formatDate(announcementDateValue(a)); } catch { return ''; }
+}
+
+function announcementPreview(text, maxLen = 140) {
+  const t = String(text || '').trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, maxLen - 3).trim()}...`;
+}
+
+function renderAnnouncementsGrid() {
+  const grid = $('#announcementsGrid');
+  if (!grid) return;
+  const searchBox = document.querySelector('[data-search-context="announcements"]');
+  const q = (searchBox?.value || '').trim().toLowerCase();
+  const filtered = announcementsCache.filter(a => {
+    if (!q) return true;
+    const title = String(a.title || '').toLowerCase();
+    const content = String(a.content || a.body || '').toLowerCase();
+    return title.includes(q) || content.includes(q);
+  });
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">No announcements yet.</div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(a => {
+    const date = formatAnnouncementDate(a) || '';
+    const preview = announcementPreview(a.content || a.body || '');
+    const title = a.title || 'Untitled';
+    return `
+      <div class="col-12 col-md-6 col-lg-4 mb-3">
+        <div class="card shadow-sm h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-start justify-content-between mb-2">
+              <h5 class="card-title mb-0">${title}</h5>
+              <span class="badge bg-light text-muted">${date}</span>
+            </div>
+            <p class="card-text text-muted small mb-3">${preview || 'No content provided.'}</p>
+            <div class="mt-auto small text-secondary">Posted ${date || 'recently'}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function refreshAnnouncements(showLoading = false) {
+  const grid = $('#announcementsGrid');
+  if (!grid) return;
+  if (showLoading) {
+    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Loading announcements...</div>';
+  }
+  if (!window.api || typeof window.api.getAnnouncements !== 'function') {
+    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Announcements unavailable.</div>';
+    return;
+  }
+  try {
+    const data = await window.api.getAnnouncements();
+    announcementsCache = Array.isArray(data) ? data : [];
+    renderAnnouncementsGrid();
+  } catch (err) {
+    console.warn('Failed to load announcements', err);
+    grid.innerHTML = '<div class="col-12 text-center text-danger py-4">Failed to load announcements.</div>';
+  }
+}
+
+async function handleAnnouncementSubmit(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const titleInput = form.querySelector('#announcementTitle') || form.querySelector('input[name="title"]');
+  const contentInput = form.querySelector('#announcementContent') || form.querySelector('textarea[name="content"]');
+  const title = (titleInput?.value || '').trim();
+  const content = (contentInput?.value || '').trim();
+  if (!title || !content) {
+    showNotification('Please add a title and content.', 'error');
+    return;
+  }
+  const submitBtn = form.querySelector('button[type="submit"]') || document.querySelector('button[form="newAnnouncementForm"][type="submit"]');
+  const originalLabel = submitBtn?.textContent;
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Posting...'; }
+  try {
+    if (!window.api || typeof window.api.createAnnouncement !== 'function') throw new Error('Announcements API not available');
+    const res = await window.api.createAnnouncement({ title, content });
+    const announcement = res?.announcement || { title, content, created_at: new Date().toISOString() };
+    announcementsCache = [announcement, ...announcementsCache];
+    renderAnnouncementsGrid();
+    form.reset();
+    const modalEl = document.getElementById('newAnnouncementModal');
+    if (modalEl && window.bootstrap && typeof window.bootstrap.Modal === 'function') {
+      const modal = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
+      modal.hide();
+    } else if (modalEl) {
+      modalEl.style.display = 'none';
+      modalEl.classList.remove('show');
+    }
+    showNotification('Announcement posted', 'info');
+  } catch (err) {
+    console.error('Failed to post announcement:', err);
+    showNotification('Failed to post announcement', 'error');
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalLabel; }
   }
 }
 
@@ -275,6 +396,8 @@ function updateCategoryOptions(projectName) {
       <option value="Regular Corner">Regular Corner</option>
       <option value="Commercial">Commercial</option>
       <option value="Commercial Corner">Commercial Corner</option>
+      <option value="Prime Commercial">Prime Commercial</option>
+      <option value="Prime Commercial Corner">Prime Commercial Corner</option>
       <option value="Prime">Prime</option>
       <option value="Prime Corner">Prime Corner</option>
     `;
@@ -536,6 +659,8 @@ async function handleImportCsvSelected(e) {
         const low = fromCol.toLowerCase();
         if (low === 'commercial' || low === 'c') category = 'Commercial';
         else if (low === 'commercial corner' || low === 'commercial_corner' || low === 'cc') category = 'Commercial Corner';
+        else if (low === 'prime commercial' || low === 'prime_commercial' || low === 'pmc') category = 'Prime Commercial';
+        else if (low === 'prime commercial corner' || low === 'prime_commercial_corner' || low === 'pmcc') category = 'Prime Commercial Corner';
         else if (low === 'prime' || low === 'p') category = 'Prime';
         else if (low === 'prime corner' || low === 'prime_corner' || low === 'pc') category = 'Prime Corner';
         else if (low === 'regular corner' || low === 'regular_corner' || low === 'rc') category = 'Regular Corner';
@@ -559,6 +684,7 @@ async function handleImportCsvSelected(e) {
           const key = (category || '').toLowerCase();
           if (!key.includes('corner')) {
             if (key === 'commercial') category = 'Commercial Corner';
+            else if (key === 'prime commercial') category = 'Prime Commercial Corner';
             else if (key === 'prime') category = 'Prime Corner';
             else if (key === 'regular' || key === '') category = 'Regular Corner';
           }
@@ -855,6 +981,10 @@ function setupEventListeners() {
   const loginForm = $('#loginForm');
   if (loginForm) loginForm.addEventListener('submit', handleLogin);
 
+  // Announcements
+  const announcementForm = $('#newAnnouncementForm');
+  if (announcementForm) announcementForm.addEventListener('submit', handleAnnouncementSubmit);
+
   // Nav links
   $$('.nav-link').forEach(l => l.addEventListener('click', handleNavigation));
 
@@ -961,6 +1091,7 @@ function setupEventListeners() {
         const categoriesFor = (proj, scope) => {
           if (proj === 'MVLC') {
             if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
+            if (scope === 'phase1') return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner', 'Prime Commercial', 'Prime Commercial Corner'];
             return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
           }
           if (proj === 'ERHD') return ['Regular', 'Prime', 'Prime Corner'];
@@ -977,13 +1108,15 @@ function setupEventListeners() {
               if (srv) {
                 if (srv.regular != null) localMap['regular'] = srv.regular;
                 if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
-                if (srv.prime != null) localMap['prime'] = srv.prime;
-                if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
-                if (srv.commercial != null) localMap['commercial'] = srv.commercial;
-                if (srv.commercial_corner != null) localMap['commercial corner'] = srv.commercial_corner;
-              }
-            } catch {}
-          }
+              if (srv.prime != null) localMap['prime'] = srv.prime;
+              if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
+              if (srv.commercial != null) localMap['commercial'] = srv.commercial;
+              if (srv.commercial_corner != null) localMap['commercial corner'] = srv.commercial_corner;
+              if (srv.prime_commercial != null) localMap['prime commercial'] = srv.prime_commercial;
+              if (srv.prime_commercial_corner != null) localMap['prime commercial corner'] = srv.prime_commercial_corner;
+            }
+          } catch {}
+        }
           const body = document.getElementById('priceFormBody');
           if (body) {
             const cats = categoriesFor(project, scope);
@@ -1068,6 +1201,8 @@ function setupEventListeners() {
                 prime_corner: map['prime corner'] ?? null,
                 commercial: map['commercial'] ?? null,
                 commercial_corner: map['commercial corner'] ?? null,
+                prime_commercial: map['prime commercial'] ?? null,
+                prime_commercial_corner: map['prime commercial corner'] ?? null,
               };
               await window.api.setMVLCPricesByScope(scope, payload);
             } else if (project === 'ERHD' && typeof window.api.setERHDPrices === 'function') {
@@ -1110,6 +1245,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (p) updateCategoryOptions(p);
     // Initial render for inventory
     renderInventoryTable();
+  }
+  if (page === 'announcements') {
+    refreshAnnouncements(true);
   }
 
   const userName = $('#userName');
