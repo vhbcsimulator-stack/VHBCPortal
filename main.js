@@ -386,6 +386,7 @@ function updateCategoryOptions(projectName) {
   const sel = $('#categorySelect');
   const phase = $('#phaseContainer');
   const drop = $('#uploadMapDropdown');
+  const dropMscc = $('#uploadMapDropdownMSCC');
   const simple = $('#uploadMapSimple');
   if (!sel) return;
 
@@ -403,7 +404,28 @@ function updateCategoryOptions(projectName) {
     `;
     phase?.classList.remove('d-none');
     drop?.classList.remove('d-none');
+    dropMscc?.classList.add('d-none');
     simple?.classList.add('d-none');
+  } else if (projectName === 'MSCC') {
+    sel.innerHTML = `
+      <option value="all">All Categories</option>
+      <option value="Premium">Premium</option>
+      <option value="Standard">Standard</option>
+    `;
+    phase?.classList.add('d-none');
+    drop?.classList.add('d-none');
+    dropMscc?.classList.remove('d-none');
+    simple?.classList.add('d-none');
+  } else if (projectName === 'ERHD') {
+    sel.innerHTML = `
+      <option value="all">All Categories</option>
+      <option value="Prime">Prime</option>
+      <option value="Regular">Regular</option>
+    `;
+    phase?.classList.add('d-none');
+    drop?.classList.add('d-none');
+    dropMscc?.classList.add('d-none');
+    simple?.classList.remove('d-none');
   } else {
     sel.innerHTML = `
       <option value="all">All Categories</option>
@@ -412,7 +434,19 @@ function updateCategoryOptions(projectName) {
     `;
     phase?.classList.add('d-none');
     drop?.classList.add('d-none');
+    dropMscc?.classList.add('d-none');
     simple?.classList.remove('d-none');
+  }
+
+  const mapInput = $('#uploadMapInput');
+  if (mapInput) {
+    if (projectName === 'MVLC') {
+      mapInput.dataset.phase = 'phase-1';
+    } else if (projectName === 'MSCC') {
+      mapInput.dataset.phase = 'floor-2';
+    } else {
+      delete mapInput.dataset.phase;
+    }
   }
   // Also ensure inventory table reflects the new project columns
   renderInventoryTable();
@@ -755,6 +789,44 @@ async function handleImportCsvSelected(e) {
   e.target.value = '';
 }
 
+// Map option helpers for multi-phase/floor uploads
+const MAP_PHASE_OPTIONS = {
+  MVLC: [
+    { value: 'phase-1', label: 'Phase 1' },
+    { value: 'phase-1-commercial', label: 'Phase 1 Commercial' },
+    { value: 'phase-2', label: 'Phase 2' },
+    { value: 'phase-3', label: 'Phase 3' },
+  ],
+  MSCC: [
+    { value: 'floor-2', label: '2nd Floor' },
+    { value: 'floor-3', label: '3rd Floor' },
+    { value: 'floor-4', label: '4th Floor' },
+    { value: 'floor-5', label: '5th Floor' },
+    { value: 'floor-6', label: '6th Floor' },
+  ]
+};
+
+function friendlyPhaseLabel(project, slug) {
+  if (!slug) return 'Map';
+  const opts = MAP_PHASE_OPTIONS[project] || [];
+  const found = opts.find(o => o.value === slug);
+  if (found) return found.label;
+  const cleaned = String(slug).replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned ? cleaned.split(' ').map(w => (w ? (w[0].toUpperCase() + w.slice(1)) : '')).join(' ') : slug;
+}
+
+function configureMapModalPhaseSelect(project) {
+  const modalPhase = $('#mapModalPhaseSelect');
+  if (!modalPhase) return [];
+  const opts = MAP_PHASE_OPTIONS[project] || [];
+  if (opts.length) {
+    modalPhase.innerHTML = opts.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  } else if (!modalPhase.innerHTML.trim()) {
+    modalPhase.innerHTML = '<option value="default">Default</option>';
+  }
+  return opts;
+}
+
 // Map upload handling (image compression and PDF support)
 function handleMapSelected(e) {
   const file = e.target?.files?.[0];
@@ -775,6 +847,7 @@ function handleMapSelected(e) {
 
   const phase = e.target.dataset.phase || 'default';
   const project = $('#projectSelect')?.value || 'default';
+  const label = friendlyPhaseLabel(project, phase);
   const keyBase = `vhbc_map_${project}_${phase}`;
 
   // Attempt to free any previous map for same slot
@@ -800,7 +873,7 @@ function handleMapSelected(e) {
             localStorage.setItem(`${keyBase}_type`, type);
             localStorage.setItem(`vhbc_map_${project}_latest`, phase);
           } catch {}
-          showNotification(`Map uploaded for ${project} ${phase}`, 'info');
+          showNotification(`Map uploaded for ${project} ${label}`, 'info');
           const modalPhase = $('#mapModalPhaseSelect');
           if (modalPhase) modalPhase.value = phase;
           loadMapPreviewForPhase(phase);
@@ -825,7 +898,7 @@ function handleMapSelected(e) {
       localStorage.setItem(`${keyBase}_type`, file.type);
       localStorage.setItem(`vhbc_map_${project}_latest`, phase);
     } catch {}
-    showNotification(`Map uploaded for ${project} ${phase}`, 'info');
+    showNotification(`Map uploaded for ${project} ${label}`, 'info');
     const modalPhase = $('#mapModalPhaseSelect');
     if (modalPhase) modalPhase.value = phase;
     loadMapPreviewForPhase(phase);
@@ -840,8 +913,9 @@ function loadMapPreviewForPhase(phase) {
   const project = $('#projectSelect')?.value || 'default';
   const keyBase = `vhbc_map_${project}_${phase}`;
   let dataUrl = localStorage.getItem(`${keyBase}_dataurl`);
-  let name = localStorage.getItem(`${keyBase}_name`) || `${project} ${phase}`;
+  let name = localStorage.getItem(`${keyBase}_name`) || friendlyPhaseLabel(project, phase);
   let type = localStorage.getItem(`${keyBase}_type`) || '';
+  const label = name || friendlyPhaseLabel(project, phase);
 
   const img = $('#mapModalImage');
   const embed = $('#mapModalEmbed');
@@ -861,7 +935,7 @@ function loadMapPreviewForPhase(phase) {
       if (latest?.url) {
         const url = latest.url;
         const t = latest.type || '';
-        const label = latest.name || `${project} ${phase}`;
+        const label = latest.name || friendlyPhaseLabel(project, phase);
         applySource(url, t, label);
         try {
           localStorage.setItem(`${keyBase}_dataurl`, url);
@@ -887,14 +961,14 @@ function loadMapPreviewForPhase(phase) {
     if (!found) {
       if (img) img.style.display = 'none';
       if (embed) embed.style.display = 'none';
-      showNotification(`No map uploaded for ${project} ${phase}`, 'info');
+      showNotification(`No map uploaded for ${project} ${label}`, 'info');
     }
   });
 
   if (img) { img.src = dataUrl; img.style.display = type === 'application/pdf' ? 'none' : 'block'; }
   if (embed) { embed.src = dataUrl; embed.style.display = type === 'application/pdf' ? 'block' : 'none'; }
   const title = $('#mapModal .modal-title');
-  if (title) title.textContent = `${project} - ${name}`;
+  if (title) title.textContent = `${project} - ${label}`;
 }
 
 // Show modal with proper phase/project setup
@@ -902,12 +976,16 @@ function showMapModal() {
   const proj = $('#projectSelect')?.value;
   if (!proj) { showNotification('Please select a project first', 'error'); return; }
   const isMVLC = proj === 'MVLC';
+  const isMSCC = proj === 'MSCC';
   const wrap = $('#mapModalPhaseWrap');
   const modalPhase = $('#mapModalPhaseSelect');
 
-  if (isMVLC) {
+  if (isMVLC || isMSCC) {
+    const opts = configureMapModalPhaseSelect(proj);
     if (wrap) wrap.style.display = 'block';
-    const latest = localStorage.getItem(`vhbc_map_${proj}_latest`) || 'phase-1';
+    const lbl = wrap ? wrap.querySelector('label') : null;
+    if (lbl) lbl.textContent = isMSCC ? 'Floor:' : 'Phase:';
+    const latest = localStorage.getItem(`vhbc_map_${proj}_latest`) || (opts && opts[0] ? opts[0].value : (isMSCC ? 'floor-2' : 'phase-1'));
     if (modalPhase) modalPhase.value = latest;
     loadMapPreviewForPhase(modalPhase?.value || latest);
   } else {
@@ -1006,8 +1084,12 @@ function setupEventListeners() {
   const uploadMapBtn = $('#uploadMapBtn');
   const uploadMapInput = $('#uploadMapInput');
   const uploadMapDropdown = $('#uploadMapDropdown');
+  const uploadMapDropdownMSCC = $('#uploadMapDropdownMSCC');
   if (uploadMapBtn && uploadMapInput) {
-    uploadMapBtn.addEventListener('click', () => uploadMapInput.click());
+    uploadMapBtn.addEventListener('click', () => {
+      uploadMapInput.dataset.phase = 'default';
+      uploadMapInput.click();
+    });
     uploadMapInput.addEventListener('change', handleMapSelected);
   }
   if (uploadMapDropdown && uploadMapInput) {
@@ -1015,6 +1097,16 @@ function setupEventListeners() {
       item.addEventListener('click', ev => {
         ev.preventDefault();
         const phase = item.getAttribute('data-phase') || 'phase-1';
+        uploadMapInput.dataset.phase = phase;
+        uploadMapInput.click();
+      });
+    });
+  }
+  if (uploadMapDropdownMSCC && uploadMapInput) {
+    uploadMapDropdownMSCC.querySelectorAll('.upload-map-phase').forEach(item => {
+      item.addEventListener('click', ev => {
+        ev.preventDefault();
+        const phase = item.getAttribute('data-phase') || 'floor-2';
         uploadMapInput.dataset.phase = phase;
         uploadMapInput.click();
       });
@@ -1064,12 +1156,14 @@ function setupEventListeners() {
   const openPriceModalBtn = $('#openPriceModal');
   if (openPriceModalBtn) {
     openPriceModalBtn.addEventListener('click', () => {
-        const project = $('#projectSelect')?.value || 'MVLC';
-        const lots = getInventory(project);
-        let categories = Array.from(new Set(lots.map(l => (l.category || '').trim()).filter(Boolean)));
-        if (!categories.length) {
-          categories = ['Regular', 'Prime', 'Prime Corner'];
-        }
+      const project = $('#projectSelect')?.value || 'MVLC';
+      const lots = getInventory(project);
+      let categories = Array.from(new Set(lots.map(l => (l.category || '').trim()).filter(Boolean)));
+      if (project === 'MSCC') {
+        categories = ['Price per sqm'];
+      } else if (!categories.length) {
+        categories = ['Regular', 'Prime', 'Prime Corner'];
+      }
 
       // MVLC: show phase group choice and adapt categories
       const phaseGroupWrap = document.getElementById('pricePhaseGroup');
@@ -1088,26 +1182,27 @@ function setupEventListeners() {
         return sel ? sel.value : 'phase2';
       };
 
-        const categoriesFor = (proj, scope) => {
-          if (proj === 'MVLC') {
-            if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
-            if (scope === 'phase1') return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner', 'Prime Commercial', 'Prime Commercial Corner'];
-            return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
-          }
-          if (proj === 'ERHD') return ['Regular', 'Prime', 'Prime Corner'];
-          return ['Regular', 'Prime', 'Prime Corner'];
-        };
+      const categoriesFor = (proj, scope) => {
+        if (proj === 'MSCC') return ['Price per sqm'];
+        if (proj === 'MVLC') {
+          if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
+          if (scope === 'phase1') return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner', 'Prime Commercial', 'Prime Commercial Corner'];
+          return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
+        }
+        if (proj === 'ERHD') return ['Regular', 'Prime', 'Prime Corner'];
+        return ['Regular', 'Prime', 'Prime Corner'];
+      };
 
-        const renderForm = async () => {
-          const scope = currentScope();
-          const localMap = getPriceMap(project, scope);
-        // Prefill from server if MVLC (single table with phase column)
-          if (project === 'MVLC' && window.api && window.api.supabase && typeof window.api.getMVLCPricesByScope === 'function' && await hasSupabaseSession()) {
-            try {
-              const srv = await window.api.getMVLCPricesByScope(scope);
-              if (srv) {
-                if (srv.regular != null) localMap['regular'] = srv.regular;
-                if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
+      const renderForm = async () => {
+        const scope = currentScope();
+        const localMap = getPriceMap(project, scope);
+        // Prefill from server
+        if (project === 'MVLC' && window.api && window.api.supabase && typeof window.api.getMVLCPricesByScope === 'function' && await hasSupabaseSession()) {
+          try {
+            const srv = await window.api.getMVLCPricesByScope(scope);
+            if (srv) {
+              if (srv.regular != null) localMap['regular'] = srv.regular;
+              if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
               if (srv.prime != null) localMap['prime'] = srv.prime;
               if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
               if (srv.commercial != null) localMap['commercial'] = srv.commercial;
@@ -1116,13 +1211,21 @@ function setupEventListeners() {
               if (srv.prime_commercial_corner != null) localMap['prime commercial corner'] = srv.prime_commercial_corner;
             }
           } catch {}
+        } else if (project === 'MSCC' && window.api && window.api.supabase && typeof window.api.getMSCCPrice === 'function' && await hasSupabaseSession()) {
+          try {
+            const srv = await window.api.getMSCCPrice();
+            if (srv && srv.price_per_sqm != null) {
+              localMap['price per sqm'] = srv.price_per_sqm;
+              localMap['price_per_sqm'] = srv.price_per_sqm;
+            }
+          } catch {}
         }
-          const body = document.getElementById('priceFormBody');
-          if (body) {
-            const cats = categoriesFor(project, scope);
-            body.innerHTML = cats.map(cat => {
-              const key = (cat || '').toLowerCase();
-              const val = localMap && localMap[key] != null ? localMap[key] : '';
+        const body = document.getElementById('priceFormBody');
+        if (body) {
+          const cats = categoriesFor(project, scope);
+          body.innerHTML = cats.map(cat => {
+            const key = (cat || '').toLowerCase();
+            const val = localMap && localMap[key] != null ? localMap[key] : '';
             return `
               <div class="row g-2 align-items-center">
                 <div class="col-6"><label class="form-label mb-0">${cat}</label></div>
@@ -1172,6 +1275,11 @@ function setupEventListeners() {
           const group = (typeof l.phase === 'number') ? (l.phase === 1 ? 'phase1' : l.phase === 2 ? 'phase2' : 'phase3') : (phaseStr.includes('1') ? 'phase1' : phaseStr.includes('2') ? 'phase2' : 'phase3');
           if (group !== scope) return l; // only apply to the selected scope
         }
+        if (project === 'MSCC') {
+          const price = map['price per sqm'] ?? map['price_per_sqm'];
+          if (price != null && price !== '') return Object.assign({}, l, { pricePerSqm: Number(price) });
+          return l;
+        }
         if (map[catKey] != null && map[catKey] !== '') return Object.assign({}, l, { pricePerSqm: Number(map[catKey]) });
         return l;
       });
@@ -1186,39 +1294,43 @@ function setupEventListeners() {
         }
       };
 
-      if ((project === 'MVLC' || project === 'ERHD') && window.api && window.api.supabase) {
+      if ((project === 'MVLC' || project === 'ERHD' || project === 'MSCC') && window.api && window.api.supabase) {
         (async () => {
             try {
-              if (!(await hasSupabaseSession())) {
-                finish('Not logged in. Prices saved locally.');
-                return;
+              // Require auth for server sync to avoid silent local-only saves
+              const hasSession = await hasSupabaseSession();
+              if (!hasSession) throw new Error('Not authenticated');
+
+              if (project === 'MVLC' && typeof window.api.setMVLCPricesByScope === 'function') {
+                const payload = {
+                  regular: map['regular'] ?? null,
+                  regular_corner: map['regular corner'] ?? null,
+                  prime: map['prime'] ?? null,
+                  prime_corner: map['prime corner'] ?? null,
+                  commercial: map['commercial'] ?? null,
+                  commercial_corner: map['commercial corner'] ?? null,
+                  prime_commercial: map['prime commercial'] ?? null,
+                  prime_commercial_corner: map['prime commercial corner'] ?? null,
+                };
+                await window.api.setMVLCPricesByScope(scope, payload);
+              } else if (project === 'ERHD' && typeof window.api.setERHDPrices === 'function') {
+                const payload = {
+                  regular: map['regular'] ?? null,
+                  prime: map['prime'] ?? null,
+                  prime_corner: map['prime corner'] ?? null,
+                };
+                await window.api.setERHDPrices(payload);
+              } else if (project === 'MSCC' && typeof window.api.setMSCCPrice === 'function') {
+                const price = map['price per sqm'] ?? map['price_per_sqm'] ?? null;
+                await window.api.setMSCCPrice(price != null ? Number(price) : null);
               }
-            if (project === 'MVLC' && typeof window.api.setMVLCPricesByScope === 'function') {
-              const payload = {
-                regular: map['regular'] ?? null,
-                regular_corner: map['regular corner'] ?? null,
-                prime: map['prime'] ?? null,
-                prime_corner: map['prime corner'] ?? null,
-                commercial: map['commercial'] ?? null,
-                commercial_corner: map['commercial corner'] ?? null,
-                prime_commercial: map['prime commercial'] ?? null,
-                prime_commercial_corner: map['prime commercial corner'] ?? null,
-              };
-              await window.api.setMVLCPricesByScope(scope, payload);
-            } else if (project === 'ERHD' && typeof window.api.setERHDPrices === 'function') {
-              const payload = {
-                regular: map['regular'] ?? null,
-                prime: map['prime'] ?? null,
-                prime_corner: map['prime corner'] ?? null,
-              };
-              await window.api.setERHDPrices(payload);
+              finish('Category prices updated and synced');
+            } catch (err) {
+              console.warn('Failed syncing prices to server:', err);
+              const msg = err?.message && err.message.toLowerCase().includes('auth') ? 'Not logged in. Prices saved locally.' : 'Category prices updated (local only)';
+              finish(msg);
             }
-            finish('Category prices updated and synced');
-          } catch (err) {
-            console.warn('Failed syncing prices to server:', err);
-            finish('Category prices updated (local only)');
-          }
-        })();
+          })();
       } else {
         finish();
       }
@@ -1677,5 +1789,3 @@ function openProjectDevViewerModal() {
     if (!link) return;
     link.addEventListener('click', e => { e.preventDefault(); openFutureDevViewerModal(); });
   })();
-
-

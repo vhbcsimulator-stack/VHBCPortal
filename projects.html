@@ -26,9 +26,6 @@
             <a href="agents.html" class="nav-link">
                 <i class="fas fa-users me-2"></i> Agents
             </a>
-            <a href="followups.html" class="nav-link">
-                <i class="fas fa-tasks me-2"></i> Follow-Ups
-            </a>
             <a href="announcements.html" class="nav-link">
                 <i class="fas fa-bullhorn me-2"></i> Announcements
             </a>
@@ -57,7 +54,14 @@
                             <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-2">Phase 2 map</a>
                             <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-3">Phase 3 map</a>
                         </li>
-                        <li><a class="dropdown-item" href="#" id="uploadFlyer"><i class="fas fa-upload me-2"></i>Upload Flyer</a></li>
+                        <li id="uploadMapDropdownMSCC" class="d-none">
+                            <h6 class="dropdown-header">Upload Map (MSCC)</h6>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-2">Upload 2nd Floor Plan</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-3">Upload 3rd Floor Plan</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-4">Upload 4th Floor Plan</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-5">Upload 5th Floor Plan</a>
+                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-6">Upload 6th Floor Plan</a>
+                        </li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" id="uploadProjectDev"><i class="fas fa-upload me-2"></i>Upload Project Development</a></li>
                         <li><a class="dropdown-item" href="#" id="viewProjectDevUpdates"><i class="fas fa-images me-2"></i>View Project Development Updates</a></li>
@@ -83,6 +87,7 @@
                             <select id="projectSelect" class="form-select filter-select" data-filter-type="project">
                                 <option value="MVLC">MVLC</option>
                                 <option value="ERHD">ERHD</option>
+                                <option value="MSCC">MSCC</option>
                             </select>
                         </div>
                         <div class="col-md-3 mb-3">
