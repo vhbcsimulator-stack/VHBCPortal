@@ -26,6 +26,9 @@
             <a href="agents.html" class="nav-link">
                 <i class="fas fa-users me-2"></i> Agents
             </a>
+            <a href="followups.html" class="nav-link">
+                <i class="fas fa-tasks me-2"></i> Follow-Ups
+            </a>
             <a href="announcements.html" class="nav-link">
                 <i class="fas fa-bullhorn me-2"></i> Announcements
             </a>
@@ -50,23 +53,15 @@
                         <li id="uploadMapDropdown" class="d-none">
                             <h6 class="dropdown-header">Upload Map (MVLC)</h6>
                             <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-1">Phase 1 map</a>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-1-commercial">Phase 1 Commercial Map</a>
                             <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-2">Phase 2 map</a>
                             <a class="dropdown-item upload-map-phase" href="#" data-phase="phase-3">Phase 3 map</a>
                         </li>
-                        <li id="uploadMapDropdownMSCC" class="d-none">
-                            <h6 class="dropdown-header">Upload Map (MSCC)</h6>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-2">Upload 2nd Floor Plan</a>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-3">Upload 3rd Floor Plan</a>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-4">Upload 4th Floor Plan</a>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-5">Upload 5th Floor Plan</a>
-                            <a class="dropdown-item upload-map-phase" href="#" data-phase="floor-6">Upload 6th Floor Plan</a>
-                        </li>
+                        <li><a class="dropdown-item" href="#" id="uploadFlyer"><i class="fas fa-upload me-2"></i>Upload Flyer</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" id="uploadProjectDev"><i class="fas fa-upload me-2"></i>Upload Project Development</a></li>
                         <li><a class="dropdown-item" href="#" id="viewProjectDevUpdates"><i class="fas fa-images me-2"></i>View Project Development Updates</a></li>
-                        <li><a class="dropdown-item" href="#" id="viewFutureDevUpdates"><i class="fas fa-images me-2"></i>View Future Development Updates</a></li>
                         <li><a class="dropdown-item" href="#" id="uploadFutureDev"><i class="fas fa-upload me-2"></i>Upload Future Development</a></li>
+                        <li><a class="dropdown-item" href="#" id="viewFutureDevUpdates"><i class="fas fa-images me-2"></i>View Future Development Updates</a></li>
                     </ul>
                 </div>
                 <!-- Hidden file input for uploading map files -->
@@ -86,8 +81,10 @@
                             <label class="form-label">Project</label>
                             <select id="projectSelect" class="form-select filter-select" data-filter-type="project">
                                 <option value="MVLC">MVLC</option>
-                                <option value="ERHD">ERHD</option>
                                 <option value="MSCC">MSCC</option>
+                                <option value="ERHD">ERHD</option>
+                                <option value="EBLF">EBLF</option>
+                                <option value="GLS">GLS</option>
                             </select>
                         </div>
                         <div class="col-md-3 mb-3">
@@ -116,8 +113,6 @@
                                 <option value="phase-3">Phase 3</option>
                             </select>
                         </div>
-                        
-                        
                     </div>
                 </div>
             </div>
@@ -170,7 +165,6 @@
                         <label class="form-label mb-1">Phase:</label>
                         <select id="mapModalPhaseSelect" class="form-select">
                             <option value="phase-1">Phase 1</option>
-                            <option value="phase-1-commercial">Phase 1 Commercial</option>
                             <option value="phase-2">Phase 2</option>
                             <option value="phase-3">Phase 3</option>
                         </select>
@@ -208,6 +202,26 @@
                             <label class="btn btn-outline-secondary" for="pricePhase3">Phase 3</label>
                         </div>
                     </div>
+                    <!-- EBLF: phase group selection -->
+                    <div id="pricePhaseGroupEBLF" class="mb-3" style="display:none;">
+                        <label class="form-label mb-1">Price scope:</label>
+                        <div class="btn-group" role="group" aria-label="EBLF Phase group">
+                            <input type="radio" class="btn-check" name="pricePhaseEblf" id="pricePhaseEblfMain" value="phase_main" autocomplete="off" checked>
+                            <label class="btn btn-outline-secondary" for="pricePhaseEblfMain">Phase 2, 3 & 4</label>
+                            <input type="radio" class="btn-check" name="pricePhaseEblf" id="pricePhaseEblfPDR" value="phase_pdr" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pricePhaseEblfPDR">Phase PDR</label>
+                        </div>
+                    </div>
+                    <!-- GLS: phase group selection -->
+                    <div id="pricePhaseGroupGLS" class="mb-3" style="display:none;">
+                        <label class="form-label mb-1">Price scope:</label>
+                        <div class="btn-group" role="group" aria-label="GLS Phase group">
+                            <input type="radio" class="btn-check" name="pricePhaseGls" id="pricePhaseGlsMain" value="phase_main" autocomplete="off" checked>
+                            <label class="btn btn-outline-secondary" for="pricePhaseGlsMain">Phase 2, 3 & 4</label>
+                            <input type="radio" class="btn-check" name="pricePhaseGls" id="pricePhaseGlsPDR" value="phase_pdr" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="pricePhaseGlsPDR">Phase PDR</label>
+                        </div>
+                    </div>
                     <div id="priceFormBody" class="vstack gap-3"></div>
                 </div>
                 <div class="modal-footer">
@@ -224,8 +238,8 @@
     <script src="config.sample.js"></script>
     <script src="config.local.js"></script>
     <script src="api.js"></script>
-<!-- Excel parser for .xlsx/.xls support -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
-<script src="main.js"></script>
+    <!-- Excel parser for .xlsx/.xls support -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

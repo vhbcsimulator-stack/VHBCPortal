@@ -21,7 +21,9 @@ const mockData = {
     projectBreakdown: [
         { name: "MVLC", sold: 15, reserved: 10, available: 200 },
         { name: "MSCC", sold: 8, reserved: 5, available: 70 },
-        { name: "ERHD", sold: 12, reserved: 5, available: 50 }
+        { name: "ERHD", sold: 12, reserved: 5, available: 50 },
+        { name: "EBLF", sold: 5, reserved: 3, available: 30 },
+        { name: "GLS", sold: 2, reserved: 4, available: 40 }
     ],
     recentReservations: [
         {
@@ -44,6 +46,13 @@ const mockData = {
             status: "Reserved",
             amount: 2800000,
             date: "2025-10-15"
+        },
+        {
+            client: "Liza Soberano",
+            project: "EBLF",
+            status: "Reserved",
+            amount: 3500000,
+            date: "2025-10-22"
         }
     ],
     agents: [
@@ -133,6 +142,32 @@ const mockData = {
                     category: "Premium",
                     status: "Sold",
                     lastUpdated: "2025-10-10"
+                }
+            ]
+        },
+        {
+            project: "EBLF",
+            lots: [
+                {
+                    lotNumber: "C-101",
+                    size: 200,
+                    pricePerSqm: 20000,
+                    category: "Premium",
+                    status: "Available",
+                    lastUpdated: "2025-10-21"
+                }
+            ]
+        },
+        {
+            project: "GLS",
+            lots: [
+                {
+                    lotNumber: "D-101",
+                    size: 220,
+                    pricePerSqm: 22000,
+                    category: "Standard",
+                    status: "Available",
+                    lastUpdated: "2025-10-21"
                 }
             ]
         }

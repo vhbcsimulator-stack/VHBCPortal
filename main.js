@@ -148,8 +148,6 @@ function formatCategoryLabel(v) {
     'prime corner': 'Prime Corner',
     'commercial': 'Commercial',
     'commercial corner': 'Commercial Corner',
-    'prime commercial': 'Prime Commercial',
-    'prime commercial corner': 'Prime Commercial Corner',
     'premium': 'Premium',
     'standard': 'Standard'
   };
@@ -251,9 +249,6 @@ function handleSearch(e) {
   if (document.body.getAttribute('data-page') === 'projects') {
     renderInventoryTable();
   }
-  if (document.body.getAttribute('data-page') === 'announcements') {
-    renderAnnouncementsGrid();
-  }
 }
 function handleFilter(e) {
   if (e.target.dataset.filterType === 'project') {
@@ -265,128 +260,11 @@ function handleFilter(e) {
   }
 }
 
-// Announcements helpers
-let announcementsCache = [];
-
-function announcementDateValue(a) {
-  const candidates = [a?.created_at, a?.date, a?.date_posted, a?.createdAt];
-  for (const d of candidates) {
-    if (!d) continue;
-    const parsed = new Date(d);
-    if (!isNaN(parsed.getTime())) return parsed;
-  }
-  return new Date();
-}
-
-function formatAnnouncementDate(a) {
-  try { return formatDate(announcementDateValue(a)); } catch { return ''; }
-}
-
-function announcementPreview(text, maxLen = 140) {
-  const t = String(text || '').trim();
-  if (t.length <= maxLen) return t;
-  return `${t.slice(0, maxLen - 3).trim()}...`;
-}
-
-function renderAnnouncementsGrid() {
-  const grid = $('#announcementsGrid');
-  if (!grid) return;
-  const searchBox = document.querySelector('[data-search-context="announcements"]');
-  const q = (searchBox?.value || '').trim().toLowerCase();
-  const filtered = announcementsCache.filter(a => {
-    if (!q) return true;
-    const title = String(a.title || '').toLowerCase();
-    const content = String(a.content || a.body || '').toLowerCase();
-    return title.includes(q) || content.includes(q);
-  });
-  if (!filtered.length) {
-    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">No announcements yet.</div>';
-    return;
-  }
-  grid.innerHTML = filtered.map(a => {
-    const date = formatAnnouncementDate(a) || '';
-    const preview = announcementPreview(a.content || a.body || '');
-    const title = a.title || 'Untitled';
-    return `
-      <div class="col-12 col-md-6 col-lg-4 mb-3">
-        <div class="card shadow-sm h-100">
-          <div class="card-body d-flex flex-column">
-            <div class="d-flex align-items-start justify-content-between mb-2">
-              <h5 class="card-title mb-0">${title}</h5>
-              <span class="badge bg-light text-muted">${date}</span>
-            </div>
-            <p class="card-text text-muted small mb-3">${preview || 'No content provided.'}</p>
-            <div class="mt-auto small text-secondary">Posted ${date || 'recently'}</div>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-async function refreshAnnouncements(showLoading = false) {
-  const grid = $('#announcementsGrid');
-  if (!grid) return;
-  if (showLoading) {
-    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Loading announcements...</div>';
-  }
-  if (!window.api || typeof window.api.getAnnouncements !== 'function') {
-    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Announcements unavailable.</div>';
-    return;
-  }
-  try {
-    const data = await window.api.getAnnouncements();
-    announcementsCache = Array.isArray(data) ? data : [];
-    renderAnnouncementsGrid();
-  } catch (err) {
-    console.warn('Failed to load announcements', err);
-    grid.innerHTML = '<div class="col-12 text-center text-danger py-4">Failed to load announcements.</div>';
-  }
-}
-
-async function handleAnnouncementSubmit(ev) {
-  ev.preventDefault();
-  const form = ev.target;
-  const titleInput = form.querySelector('#announcementTitle') || form.querySelector('input[name="title"]');
-  const contentInput = form.querySelector('#announcementContent') || form.querySelector('textarea[name="content"]');
-  const title = (titleInput?.value || '').trim();
-  const content = (contentInput?.value || '').trim();
-  if (!title || !content) {
-    showNotification('Please add a title and content.', 'error');
-    return;
-  }
-  const submitBtn = form.querySelector('button[type="submit"]') || document.querySelector('button[form="newAnnouncementForm"][type="submit"]');
-  const originalLabel = submitBtn?.textContent;
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Posting...'; }
-  try {
-    if (!window.api || typeof window.api.createAnnouncement !== 'function') throw new Error('Announcements API not available');
-    const res = await window.api.createAnnouncement({ title, content });
-    const announcement = res?.announcement || { title, content, created_at: new Date().toISOString() };
-    announcementsCache = [announcement, ...announcementsCache];
-    renderAnnouncementsGrid();
-    form.reset();
-    const modalEl = document.getElementById('newAnnouncementModal');
-    if (modalEl && window.bootstrap && typeof window.bootstrap.Modal === 'function') {
-      const modal = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
-      modal.hide();
-    } else if (modalEl) {
-      modalEl.style.display = 'none';
-      modalEl.classList.remove('show');
-    }
-    showNotification('Announcement posted', 'info');
-  } catch (err) {
-    console.error('Failed to post announcement:', err);
-    showNotification('Failed to post announcement', 'error');
-  } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalLabel; }
-  }
-}
-
 // Update categories based on selected project
 function updateCategoryOptions(projectName) {
   const sel = $('#categorySelect');
   const phase = $('#phaseContainer');
   const drop = $('#uploadMapDropdown');
-  const dropMscc = $('#uploadMapDropdownMSCC');
   const simple = $('#uploadMapSimple');
   if (!sel) return;
 
@@ -397,34 +275,22 @@ function updateCategoryOptions(projectName) {
       <option value="Regular Corner">Regular Corner</option>
       <option value="Commercial">Commercial</option>
       <option value="Commercial Corner">Commercial Corner</option>
-      <option value="Prime Commercial">Prime Commercial</option>
-      <option value="Prime Commercial Corner">Prime Commercial Corner</option>
       <option value="Prime">Prime</option>
       <option value="Prime Corner">Prime Corner</option>
     `;
     phase?.classList.remove('d-none');
     drop?.classList.remove('d-none');
-    dropMscc?.classList.add('d-none');
     simple?.classList.add('d-none');
-  } else if (projectName === 'MSCC') {
+  } else if (projectName === 'EBLF') {
     sel.innerHTML = `
       <option value="all">All Categories</option>
-      <option value="Premium">Premium</option>
-      <option value="Standard">Standard</option>
-    `;
-    phase?.classList.add('d-none');
-    drop?.classList.add('d-none');
-    dropMscc?.classList.remove('d-none');
-    simple?.classList.add('d-none');
-  } else if (projectName === 'ERHD') {
-    sel.innerHTML = `
-      <option value="all">All Categories</option>
-      <option value="Prime">Prime</option>
       <option value="Regular">Regular</option>
+      <option value="Corner">Corner</option>
+      <option value="Prime">Prime</option>
+      <option value="Prime Corner">Prime Corner</option>
     `;
     phase?.classList.add('d-none');
     drop?.classList.add('d-none');
-    dropMscc?.classList.add('d-none');
     simple?.classList.remove('d-none');
   } else {
     sel.innerHTML = `
@@ -434,19 +300,7 @@ function updateCategoryOptions(projectName) {
     `;
     phase?.classList.add('d-none');
     drop?.classList.add('d-none');
-    dropMscc?.classList.add('d-none');
     simple?.classList.remove('d-none');
-  }
-
-  const mapInput = $('#uploadMapInput');
-  if (mapInput) {
-    if (projectName === 'MVLC') {
-      mapInput.dataset.phase = 'phase-1';
-    } else if (projectName === 'MSCC') {
-      mapInput.dataset.phase = 'floor-2';
-    } else {
-      delete mapInput.dataset.phase;
-    }
   }
   // Also ensure inventory table reflects the new project columns
   renderInventoryTable();
@@ -693,8 +547,6 @@ async function handleImportCsvSelected(e) {
         const low = fromCol.toLowerCase();
         if (low === 'commercial' || low === 'c') category = 'Commercial';
         else if (low === 'commercial corner' || low === 'commercial_corner' || low === 'cc') category = 'Commercial Corner';
-        else if (low === 'prime commercial' || low === 'prime_commercial' || low === 'pmc') category = 'Prime Commercial';
-        else if (low === 'prime commercial corner' || low === 'prime_commercial_corner' || low === 'pmcc') category = 'Prime Commercial Corner';
         else if (low === 'prime' || low === 'p') category = 'Prime';
         else if (low === 'prime corner' || low === 'prime_corner' || low === 'pc') category = 'Prime Corner';
         else if (low === 'regular corner' || low === 'regular_corner' || low === 'rc') category = 'Regular Corner';
@@ -718,7 +570,6 @@ async function handleImportCsvSelected(e) {
           const key = (category || '').toLowerCase();
           if (!key.includes('corner')) {
             if (key === 'commercial') category = 'Commercial Corner';
-            else if (key === 'prime commercial') category = 'Prime Commercial Corner';
             else if (key === 'prime') category = 'Prime Corner';
             else if (key === 'regular' || key === '') category = 'Regular Corner';
           }
@@ -755,7 +606,7 @@ async function handleImportCsvSelected(e) {
       }
     }
     setInventory(project, merged);
-    showNotification(`Imported ${lots.length} rows for ${project} â€” updated ${updatedLocal}, added ${insertedLocal}`, 'info');
+    showNotification(`Imported ${lots.length} rows for ${project} — updated ${updatedLocal}, added ${insertedLocal}`, 'info');
 
     // Save to Supabase 'lots' table if available and authenticated
     try {
@@ -764,7 +615,7 @@ async function handleImportCsvSelected(e) {
         if (!error && u?.user && typeof window.api.saveLots === 'function') {
           const res = await window.api.saveLots(project, lots);
           if (res && typeof res === 'object') {
-            showNotification(`Database upsert complete â€” updated ${res.updated || 0}, inserted ${res.inserted || 0}`, 'info');
+            showNotification(`Database upsert complete — updated ${res.updated || 0}, inserted ${res.inserted || 0}`, 'info');
           } else {
             showNotification('Lots saved to database', 'info');
           }
@@ -789,44 +640,6 @@ async function handleImportCsvSelected(e) {
   e.target.value = '';
 }
 
-// Map option helpers for multi-phase/floor uploads
-const MAP_PHASE_OPTIONS = {
-  MVLC: [
-    { value: 'phase-1', label: 'Phase 1' },
-    { value: 'phase-1-commercial', label: 'Phase 1 Commercial' },
-    { value: 'phase-2', label: 'Phase 2' },
-    { value: 'phase-3', label: 'Phase 3' },
-  ],
-  MSCC: [
-    { value: 'floor-2', label: '2nd Floor' },
-    { value: 'floor-3', label: '3rd Floor' },
-    { value: 'floor-4', label: '4th Floor' },
-    { value: 'floor-5', label: '5th Floor' },
-    { value: 'floor-6', label: '6th Floor' },
-  ]
-};
-
-function friendlyPhaseLabel(project, slug) {
-  if (!slug) return 'Map';
-  const opts = MAP_PHASE_OPTIONS[project] || [];
-  const found = opts.find(o => o.value === slug);
-  if (found) return found.label;
-  const cleaned = String(slug).replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned ? cleaned.split(' ').map(w => (w ? (w[0].toUpperCase() + w.slice(1)) : '')).join(' ') : slug;
-}
-
-function configureMapModalPhaseSelect(project) {
-  const modalPhase = $('#mapModalPhaseSelect');
-  if (!modalPhase) return [];
-  const opts = MAP_PHASE_OPTIONS[project] || [];
-  if (opts.length) {
-    modalPhase.innerHTML = opts.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-  } else if (!modalPhase.innerHTML.trim()) {
-    modalPhase.innerHTML = '<option value="default">Default</option>';
-  }
-  return opts;
-}
-
 // Map upload handling (image compression and PDF support)
 function handleMapSelected(e) {
   const file = e.target?.files?.[0];
@@ -847,7 +660,6 @@ function handleMapSelected(e) {
 
   const phase = e.target.dataset.phase || 'default';
   const project = $('#projectSelect')?.value || 'default';
-  const label = friendlyPhaseLabel(project, phase);
   const keyBase = `vhbc_map_${project}_${phase}`;
 
   // Attempt to free any previous map for same slot
@@ -873,7 +685,7 @@ function handleMapSelected(e) {
             localStorage.setItem(`${keyBase}_type`, type);
             localStorage.setItem(`vhbc_map_${project}_latest`, phase);
           } catch {}
-          showNotification(`Map uploaded for ${project} ${label}`, 'info');
+          showNotification(`Map uploaded for ${project} ${phase}`, 'info');
           const modalPhase = $('#mapModalPhaseSelect');
           if (modalPhase) modalPhase.value = phase;
           loadMapPreviewForPhase(phase);
@@ -898,7 +710,7 @@ function handleMapSelected(e) {
       localStorage.setItem(`${keyBase}_type`, file.type);
       localStorage.setItem(`vhbc_map_${project}_latest`, phase);
     } catch {}
-    showNotification(`Map uploaded for ${project} ${label}`, 'info');
+    showNotification(`Map uploaded for ${project} ${phase}`, 'info');
     const modalPhase = $('#mapModalPhaseSelect');
     if (modalPhase) modalPhase.value = phase;
     loadMapPreviewForPhase(phase);
@@ -912,86 +724,64 @@ function handleMapSelected(e) {
 function loadMapPreviewForPhase(phase) {
   const project = $('#projectSelect')?.value || 'default';
   const keyBase = `vhbc_map_${project}_${phase}`;
-  let dataUrl = localStorage.getItem(`${keyBase}_dataurl`);
-  let name = localStorage.getItem(`${keyBase}_name`) || friendlyPhaseLabel(project, phase);
-  let type = localStorage.getItem(`${keyBase}_type`) || '';
-  const label = name || friendlyPhaseLabel(project, phase);
-
+  
   const img = $('#mapModalImage');
   const embed = $('#mapModalEmbed');
+  const title = $('#mapModal .modal-title');
 
-  const applySource = (src, mime, label) => {
-    const isPdf = mime === 'application/pdf' || (src && src.toLowerCase().endsWith('.pdf'));
-    if (img) { img.src = src; img.style.display = isPdf ? 'none' : 'block'; }
-    if (embed) { embed.src = src; embed.style.display = isPdf ? 'block' : 'none'; }
-    const title = $('#mapModal .modal-title');
-    if (title) title.textContent = `${project} - ${label}`;
-  };
-
-  const fetchLatestFromSupabase = async () => {
-    if (!window.api || !window.api.supabase) return false;
-    try {
+  if (window.api && window.api.supabase) {
+    (async () => {
       const latest = await window.api.getLatestMapUrl(project, phase);
       if (latest?.url) {
         const url = latest.url;
         const t = latest.type || '';
-        const label = latest.name || friendlyPhaseLabel(project, phase);
-        applySource(url, t, label);
+        if (img) { img.src = url; img.style.display = t === 'application/pdf' ? 'none' : 'block'; }
+        if (embed) { embed.src = url; embed.style.display = t === 'application/pdf' ? 'block' : 'none'; }
+        if (title) title.textContent = `${project} - ${latest.name || (project + ' ' + (phase === 'default' ? '' : phase))}`;
         try {
           localStorage.setItem(`${keyBase}_dataurl`, url);
-          localStorage.setItem(`${keyBase}_name`, label);
+          localStorage.setItem(`${keyBase}_name`, latest.name || `${project} ${phase}`);
           localStorage.setItem(`${keyBase}_type`, t);
         } catch {}
-        return true;
+      } else {
+        if (img) img.style.display = 'none';
+        if (embed) embed.style.display = 'none';
+        showNotification(`No map uploaded for ${project} ${phase === 'default' ? '' : phase}`, 'info');
       }
-    } catch (err) {
-      console.warn('Failed fetching map from Supabase:', err);
-    }
-    return false;
-  };
+    })();
+  } else {
+    const dataUrl = localStorage.getItem(`${keyBase}_dataurl`);
+    const name = localStorage.getItem(`${keyBase}_name`) || `${project} ${phase}`;
+    const type = localStorage.getItem(`${keyBase}_type`) || '';
 
-  if (dataUrl) {
-    applySource(dataUrl, type, name);
-    // Refresh from Supabase to avoid stale/expired URLs
-    fetchLatestFromSupabase();
-    return;
-  }
-
-  fetchLatestFromSupabase().then(found => {
-    if (!found) {
+    if (!dataUrl) {
       if (img) img.style.display = 'none';
       if (embed) embed.style.display = 'none';
-      showNotification(`No map uploaded for ${project} ${label}`, 'info');
+      showNotification(`No map uploaded for ${project} ${phase === 'default' ? '' : phase}`, 'info');
+      return;
     }
-  });
-
-  if (img) { img.src = dataUrl; img.style.display = type === 'application/pdf' ? 'none' : 'block'; }
-  if (embed) { embed.src = dataUrl; embed.style.display = type === 'application/pdf' ? 'block' : 'none'; }
-  const title = $('#mapModal .modal-title');
-  if (title) title.textContent = `${project} - ${label}`;
+    if (img) { img.src = dataUrl; img.style.display = type === 'application/pdf' ? 'none' : 'block'; }
+    if (embed) { embed.src = dataUrl; embed.style.display = type === 'application/pdf' ? 'block' : 'none'; }
+    if (title) title.textContent = `${project} - ${name}`;
+  }
 }
+
 
 // Show modal with proper phase/project setup
 function showMapModal() {
   const proj = $('#projectSelect')?.value;
   if (!proj) { showNotification('Please select a project first', 'error'); return; }
   const isMVLC = proj === 'MVLC';
-  const isMSCC = proj === 'MSCC';
   const wrap = $('#mapModalPhaseWrap');
   const modalPhase = $('#mapModalPhaseSelect');
 
-  if (isMVLC || isMSCC) {
-    const opts = configureMapModalPhaseSelect(proj);
+  if (isMVLC) {
     if (wrap) wrap.style.display = 'block';
-    const lbl = wrap ? wrap.querySelector('label') : null;
-    if (lbl) lbl.textContent = isMSCC ? 'Floor:' : 'Phase:';
-    const latest = localStorage.getItem(`vhbc_map_${proj}_latest`) || (opts && opts[0] ? opts[0].value : (isMSCC ? 'floor-2' : 'phase-1'));
+    const latest = localStorage.getItem(`vhbc_map_${proj}_latest`) || 'phase-1';
     if (modalPhase) modalPhase.value = latest;
     loadMapPreviewForPhase(modalPhase?.value || latest);
   } else {
     if (wrap) wrap.style.display = 'none';
-    const d = localStorage.getItem(`vhbc_map_${proj}_default_dataurl`);
-    if (!d) { showNotification(`No map uploaded yet for ${proj}`, 'info'); return; }
     loadMapPreviewForPhase('default');
   }
 
@@ -1059,10 +849,6 @@ function setupEventListeners() {
   const loginForm = $('#loginForm');
   if (loginForm) loginForm.addEventListener('submit', handleLogin);
 
-  // Announcements
-  const announcementForm = $('#newAnnouncementForm');
-  if (announcementForm) announcementForm.addEventListener('submit', handleAnnouncementSubmit);
-
   // Nav links
   $$('.nav-link').forEach(l => l.addEventListener('click', handleNavigation));
 
@@ -1084,12 +870,8 @@ function setupEventListeners() {
   const uploadMapBtn = $('#uploadMapBtn');
   const uploadMapInput = $('#uploadMapInput');
   const uploadMapDropdown = $('#uploadMapDropdown');
-  const uploadMapDropdownMSCC = $('#uploadMapDropdownMSCC');
   if (uploadMapBtn && uploadMapInput) {
-    uploadMapBtn.addEventListener('click', () => {
-      uploadMapInput.dataset.phase = 'default';
-      uploadMapInput.click();
-    });
+    uploadMapBtn.addEventListener('click', () => uploadMapInput.click());
     uploadMapInput.addEventListener('change', handleMapSelected);
   }
   if (uploadMapDropdown && uploadMapInput) {
@@ -1097,16 +879,6 @@ function setupEventListeners() {
       item.addEventListener('click', ev => {
         ev.preventDefault();
         const phase = item.getAttribute('data-phase') || 'phase-1';
-        uploadMapInput.dataset.phase = phase;
-        uploadMapInput.click();
-      });
-    });
-  }
-  if (uploadMapDropdownMSCC && uploadMapInput) {
-    uploadMapDropdownMSCC.querySelectorAll('.upload-map-phase').forEach(item => {
-      item.addEventListener('click', ev => {
-        ev.preventDefault();
-        const phase = item.getAttribute('data-phase') || 'floor-2';
         uploadMapInput.dataset.phase = phase;
         uploadMapInput.click();
       });
@@ -1159,64 +931,107 @@ function setupEventListeners() {
       const project = $('#projectSelect')?.value || 'MVLC';
       const lots = getInventory(project);
       let categories = Array.from(new Set(lots.map(l => (l.category || '').trim()).filter(Boolean)));
-      if (project === 'MSCC') {
-        categories = ['Price per sqm'];
-      } else if (!categories.length) {
-        categories = ['Regular', 'Prime', 'Prime Corner'];
+      if (!categories.length) {
+        if (project === 'MVLC') {
+          categories = ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
+        } else if (project === 'EBLF') {
+          categories = ['Regular', 'Corner', 'Prime', 'Prime Corner'];
+        } else {
+          categories = ['Premium', 'Standard'];
+        }
       }
 
-      // MVLC: show phase group choice and adapt categories
+      // MVLC, EBLF, and GLS: show phase group choice and adapt categories
       const phaseGroupWrap = document.getElementById('pricePhaseGroup');
-      if (project === 'MVLC' && phaseGroupWrap) {
-        phaseGroupWrap.style.display = '';
-        // Default to Phase 2
+      const phaseGroupWrapEblf = document.getElementById('pricePhaseGroupEBLF');
+      const phaseGroupWrapGls = document.getElementById('pricePhaseGroupGLS');
+      if (project === 'MVLC') {
+        if (phaseGroupWrap) phaseGroupWrap.style.display = '';
+        if (phaseGroupWrapEblf) phaseGroupWrapEblf.style.display = 'none';
+        if (phaseGroupWrapGls) phaseGroupWrapGls.style.display = 'none';
         const r2 = document.getElementById('pricePhase2');
         if (r2) r2.checked = true;
-      } else if (phaseGroupWrap) {
-        phaseGroupWrap.style.display = 'none';
+      } else if (project === 'EBLF') {
+        if (phaseGroupWrap) phaseGroupWrap.style.display = 'none';
+        if (phaseGroupWrapEblf) phaseGroupWrapEblf.style.display = '';
+        if (phaseGroupWrapGls) phaseGroupWrapGls.style.display = 'none';
+        const reblf = document.getElementById('pricePhaseEblfMain');
+        if (reblf) reblf.checked = true;
+      } else if (project === 'GLS') {
+        if (phaseGroupWrap) phaseGroupWrap.style.display = 'none';
+        if (phaseGroupWrapEblf) phaseGroupWrapEblf.style.display = 'none';
+        if (phaseGroupWrapGls) phaseGroupWrapGls.style.display = '';
+        const rgls = document.getElementById('pricePhaseGlsMain');
+        if (rgls) rgls.checked = true;
+      } else {
+        if (phaseGroupWrap) phaseGroupWrap.style.display = 'none';
+        if (phaseGroupWrapEblf) phaseGroupWrapEblf.style.display = 'none';
+        if (phaseGroupWrapGls) phaseGroupWrapGls.style.display = 'none';
       }
 
       const currentScope = () => {
-        if (project !== 'MVLC') return undefined;
-        const sel = document.querySelector('input[name="pricePhase"]:checked');
-        return sel ? sel.value : 'phase2';
+        if (project === 'MVLC') {
+          const sel = document.querySelector('input[name="pricePhase"]:checked');
+          return sel ? sel.value : 'phase2';
+        } else if (project === 'EBLF') {
+          const sel = document.querySelector('input[name="pricePhaseEblf"]:checked');
+          return sel ? sel.value : 'phase_main';
+        } else if (project === 'GLS') {
+          const sel = document.querySelector('input[name="pricePhaseGls"]:checked');
+          return sel ? sel.value : 'phase_main';
+        }
+        return undefined;
       };
 
       const categoriesFor = (proj, scope) => {
-        if (proj === 'MSCC') return ['Price per sqm'];
         if (proj === 'MVLC') {
           if (scope === 'phase2') return ['Regular', 'Regular Corner', 'Prime', 'Prime Corner'];
-          if (scope === 'phase1') return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner', 'Prime Commercial', 'Prime Commercial Corner'];
           return ['Regular', 'Regular Corner', 'Commercial', 'Commercial Corner'];
         }
-        if (proj === 'ERHD') return ['Regular', 'Prime', 'Prime Corner'];
-        return ['Regular', 'Prime', 'Prime Corner'];
+        if (proj === 'EBLF') {
+          if (scope === 'phase_main') return ['Regular', 'Corner'];
+          return ['Regular', 'Corner', 'Prime', 'Prime Corner'];
+        }
+        if (proj === 'GLS') {
+          if (scope === 'phase_main') return ['Regular', 'Corner'];
+          return ['Regular', 'Corner', 'Prime', 'Prime Corner'];
+        }
+        return categories; // non-MVLC/EBLF/GLS
       };
 
       const renderForm = async () => {
         const scope = currentScope();
         const localMap = getPriceMap(project, scope);
-        // Prefill from server
         if (project === 'MVLC' && window.api && window.api.supabase && typeof window.api.getMVLCPricesByScope === 'function' && await hasSupabaseSession()) {
           try {
             const srv = await window.api.getMVLCPricesByScope(scope);
             if (srv) {
               if (srv.regular != null) localMap['regular'] = srv.regular;
-              if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
               if (srv.prime != null) localMap['prime'] = srv.prime;
+              if (srv.regular_corner != null) localMap['regular corner'] = srv.regular_corner;
               if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
               if (srv.commercial != null) localMap['commercial'] = srv.commercial;
               if (srv.commercial_corner != null) localMap['commercial corner'] = srv.commercial_corner;
-              if (srv.prime_commercial != null) localMap['prime commercial'] = srv.prime_commercial;
-              if (srv.prime_commercial_corner != null) localMap['prime commercial corner'] = srv.prime_commercial_corner;
             }
           } catch {}
-        } else if (project === 'MSCC' && window.api && window.api.supabase && typeof window.api.getMSCCPrice === 'function' && await hasSupabaseSession()) {
+        } else if (project === 'EBLF' && window.api && window.api.supabase && typeof window.api.getEBLFPricesByScope === 'function' && await hasSupabaseSession()) {
           try {
-            const srv = await window.api.getMSCCPrice();
-            if (srv && srv.price_per_sqm != null) {
-              localMap['price per sqm'] = srv.price_per_sqm;
-              localMap['price_per_sqm'] = srv.price_per_sqm;
+            const srv = await window.api.getEBLFPricesByScope(scope);
+            if (srv) {
+              if (srv.regular != null) localMap['regular'] = srv.regular;
+              if (srv.prime != null) localMap['prime'] = srv.prime;
+              if (srv.regular_corner != null) localMap['corner'] = srv.regular_corner;
+              if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
+            }
+          } catch {}
+        } else if (project === 'GLS' && window.api && window.api.supabase && typeof window.api.getGLSPricesByScope === 'function' && await hasSupabaseSession()) {
+          try {
+            const srv = await window.api.getGLSPricesByScope(scope);
+            if (srv) {
+              if (srv.regular != null) localMap['regular'] = srv.regular;
+              if (srv.prime != null) localMap['prime'] = srv.prime;
+              if (srv.regular_corner != null) localMap['corner'] = srv.regular_corner;
+              if (srv.prime_corner != null) localMap['prime corner'] = srv.prime_corner;
             }
           } catch {}
         }
@@ -1237,9 +1052,19 @@ function setupEventListeners() {
 
       (async () => { await renderForm(); })();
 
-      // Change handler for MVLC group selection
+      // Change handler for group selection
       if (project === 'MVLC') {
         ['pricePhase1','pricePhase2','pricePhase3'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('change', renderForm);
+        });
+      } else if (project === 'EBLF') {
+        ['pricePhaseEblfMain','pricePhaseEblfPDR'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('change', renderForm);
+        });
+      } else if (project === 'GLS') {
+        ['pricePhaseGlsMain','pricePhaseGlsPDR'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.addEventListener('change', renderForm);
         });
@@ -1256,7 +1081,7 @@ function setupEventListeners() {
   if (savePricesBtn) {
     savePricesBtn.addEventListener('click', () => {
       const project = $('#projectSelect')?.value || 'MVLC';
-      const scope = (project === 'MVLC') ? (document.querySelector('input[name="pricePhase"]:checked')?.value || 'phase2') : undefined;
+      const scope = (project === 'MVLC') ? (document.querySelector('input[name="pricePhase"]:checked')?.value || 'phase2') : (project === 'EBLF' ? (document.querySelector('input[name="pricePhaseEblf"]:checked')?.value || 'phase_main') : (project === 'GLS' ? (document.querySelector('input[name="pricePhaseGls"]:checked')?.value || 'phase_main') : undefined));
       const inputs = Array.from(document.querySelectorAll('#priceFormBody .price-input'));
       const map = getPriceMap(project, scope);
       inputs.forEach(inp => {
@@ -1274,11 +1099,11 @@ function setupEventListeners() {
           const phaseStr = String(l.phase ?? '').toLowerCase();
           const group = (typeof l.phase === 'number') ? (l.phase === 1 ? 'phase1' : l.phase === 2 ? 'phase2' : 'phase3') : (phaseStr.includes('1') ? 'phase1' : phaseStr.includes('2') ? 'phase2' : 'phase3');
           if (group !== scope) return l; // only apply to the selected scope
-        }
-        if (project === 'MSCC') {
-          const price = map['price per sqm'] ?? map['price_per_sqm'];
-          if (price != null && price !== '') return Object.assign({}, l, { pricePerSqm: Number(price) });
-          return l;
+        } else if (project === 'EBLF') {
+          const phaseStr = String(l.phase ?? '').toLowerCase();
+          const isPdr = phaseStr.includes('pdr');
+          const group = isPdr ? 'phase_pdr' : 'phase_main';
+          if (group !== scope) return l; // only apply to the selected scope
         }
         if (map[catKey] != null && map[catKey] !== '') return Object.assign({}, l, { pricePerSqm: Number(map[catKey]) });
         return l;
@@ -1294,43 +1119,74 @@ function setupEventListeners() {
         }
       };
 
-      if ((project === 'MVLC' || project === 'ERHD' || project === 'MSCC') && window.api && window.api.supabase) {
+      if (project === 'MVLC' && window.api && window.api.supabase) {
         (async () => {
-            try {
-              // Require auth for server sync to avoid silent local-only saves
-              const hasSession = await hasSupabaseSession();
-              if (!hasSession) throw new Error('Not authenticated');
-
-              if (project === 'MVLC' && typeof window.api.setMVLCPricesByScope === 'function') {
-                const payload = {
-                  regular: map['regular'] ?? null,
-                  regular_corner: map['regular corner'] ?? null,
-                  prime: map['prime'] ?? null,
-                  prime_corner: map['prime corner'] ?? null,
-                  commercial: map['commercial'] ?? null,
-                  commercial_corner: map['commercial corner'] ?? null,
-                  prime_commercial: map['prime commercial'] ?? null,
-                  prime_commercial_corner: map['prime commercial corner'] ?? null,
-                };
-                await window.api.setMVLCPricesByScope(scope, payload);
-              } else if (project === 'ERHD' && typeof window.api.setERHDPrices === 'function') {
-                const payload = {
-                  regular: map['regular'] ?? null,
-                  prime: map['prime'] ?? null,
-                  prime_corner: map['prime corner'] ?? null,
-                };
-                await window.api.setERHDPrices(payload);
-              } else if (project === 'MSCC' && typeof window.api.setMSCCPrice === 'function') {
-                const price = map['price per sqm'] ?? map['price_per_sqm'] ?? null;
-                await window.api.setMSCCPrice(price != null ? Number(price) : null);
-              }
-              finish('Category prices updated and synced');
-            } catch (err) {
-              console.warn('Failed syncing prices to server:', err);
-              const msg = err?.message && err.message.toLowerCase().includes('auth') ? 'Not logged in. Prices saved locally.' : 'Category prices updated (local only)';
-              finish(msg);
+          try {
+            if (!(await hasSupabaseSession())) {
+              finish('Not logged in. Prices saved locally.');
+              return;
             }
-          })();
+            if (typeof window.api.setMVLCPricesByScope === 'function') {
+              const payload = {
+                regular: map['regular'] ?? null,
+                prime: map['prime'] ?? null,
+                regular_corner: map['regular corner'] ?? null,
+                prime_corner: map['prime corner'] ?? null,
+                commercial: map['commercial'] ?? null,
+                commercial_corner: map['commercial corner'] ?? null,
+              };
+              await window.api.setMVLCPricesByScope(scope, payload);
+            }
+            finish('Category prices updated and synced');
+          } catch (err) {
+            console.warn('Failed syncing MVLC prices to server:', err);
+            finish('Category prices updated (local only)');
+          }
+        })();
+      } else if (project === 'EBLF' && window.api && window.api.supabase) {
+        (async () => {
+          try {
+            if (!(await hasSupabaseSession())) {
+              finish('Not logged in. Prices saved locally.');
+              return;
+            }
+            if (typeof window.api.setEBLFPricesByScope === 'function') {
+              const payload = {
+                regular: map['regular'] ?? null,
+                prime: map['prime'] ?? null,
+                regular_corner: map['corner'] ?? null,
+                prime_corner: map['prime corner'] ?? null
+              };
+              await window.api.setEBLFPricesByScope(scope, payload);
+            }
+            finish('EBLF category prices updated and synced');
+          } catch (err) {
+            console.warn('Failed syncing EBLF prices to server:', err);
+            finish('EBLF category prices updated (local only)');
+          }
+        })();
+      } else if (project === 'GLS' && window.api && window.api.supabase) {
+        (async () => {
+          try {
+            if (!(await hasSupabaseSession())) {
+              finish('Not logged in. Prices saved locally.');
+              return;
+            }
+            if (typeof window.api.setGLSPricesByScope === 'function') {
+              const payload = {
+                regular: map['regular'] ?? null,
+                prime: map['prime'] ?? null,
+                regular_corner: map['corner'] ?? null,
+                prime_corner: map['prime corner'] ?? null
+              };
+              await window.api.setGLSPricesByScope(scope, payload);
+            }
+            finish('GLS category prices updated and synced');
+          } catch (err) {
+            console.warn('Failed syncing GLS prices to server:', err);
+            finish('GLS category prices updated (local only)');
+          }
+        })();
       } else {
         finish();
       }
@@ -1358,9 +1214,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial render for inventory
     renderInventoryTable();
   }
-  if (page === 'announcements') {
-    refreshAnnouncements(true);
-  }
 
   const userName = $('#userName');
   const u = localStorage.getItem('vhbc_user');
@@ -1372,27 +1225,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---- Project Development Upload (Drag & Drop, multiple, no save) ----
 function ensureProjectDevStyles() {
   if (document.getElementById('projectDevUploadStyles')) return;
-    const css = `
-      #projectDevDropzone,
-      #futureDevDropzone { border-style: dashed !important; cursor: pointer; }
-      #projectDevDropzone.dragover,
-      #futureDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
-      #projectDevPreview .preview-item img,
-      #futureDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
-      #projectDevPreview .preview-item .meta,
-      #futureDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
-      #projectDevPreview .remove-btn,
-      #futureDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
-      /* Viewer styles */
-      #projectDevGrid .dev-card,
-      #futureDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
-      #projectDevGrid .dev-card img,
-      #futureDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
-      #projectDevGrid .dev-card .delete-btn,
-      #futureDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
-      #projectDevGrid .dev-card:hover .delete-btn,
-      #futureDevGrid .dev-card:hover .delete-btn { opacity: 1; }
-    `;
+  const css = `
+    #projectDevDropzone { border-style: dashed !important; cursor: pointer; }
+    #projectDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
+    #projectDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
+    #projectDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
+    #projectDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
+    /* Viewer styles */
+    #projectDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
+    #projectDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    #projectDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
+    #projectDevGrid .dev-card:hover .delete-btn { opacity: 1; }
+  `;
   const style = document.createElement('style');
   style.id = 'projectDevUploadStyles';
   style.textContent = css;
@@ -1407,173 +1251,143 @@ function bytesToSize(bytes) {
   return `${val} ${sizes[i]}`;
 }
 
-const devUploadModals = {};
+function openProjectDevUploadModal() {
+  ensureProjectDevStyles();
 
-function createDevUploadModal({ prefix, title, uploadFn, logLabel }) {
-  const ids = {
-    modal: `${prefix}UploadModal`,
-    dropzone: `${prefix}Dropzone`,
-    fileInput: `${prefix}FileInput`,
-    preview: `${prefix}Preview`,
-    clearBtn: `${prefix}ClearBtn`,
-    uploadBtn: `${prefix}UploadBtn`,
-  };
-
-  const modalEl = document.createElement('div');
-  modalEl.className = 'modal fade';
-  modalEl.id = ids.modal;
-  modalEl.tabIndex = -1;
-  modalEl.setAttribute('aria-hidden', 'true');
-  modalEl.innerHTML = `
+  let modalEl = document.getElementById('projectDevUploadModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.id = 'projectDevUploadModal';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">${title}</h5>
+            <h5 class="modal-title">Upload Project Development Images</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div id="${ids.dropzone}" class="border border-2 border-secondary rounded-3 p-5 text-center">
+            <div id="projectDevDropzone" class="border border-2 border-secondary rounded-3 p-5 text-center">
               <i class="fas fa-images fa-2x mb-3 text-secondary"></i>
               <p class="mb-1">Drag and drop images here</p>
               <p class="text-muted small">or click to browse</p>
             </div>
-            <input type="file" id="${ids.fileInput}" accept="image/*" multiple style="display:none">
-            <div id="${ids.preview}" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
+            <input type="file" id="projectDevFileInput" accept="image/*" multiple style="display:none">
+            <div id="projectDevPreview" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
           </div>
           <div class="modal-footer">
-            <button type="button" id="${ids.clearBtn}" class="btn btn-outline-secondary">Clear</button>
-            <button type="button" id="${ids.uploadBtn}" class="btn btn-primary">Upload</button>
+            <button type="button" id="projectDevClearBtn" class="btn btn-outline-secondary">Clear</button>
+            <button type="button" id="projectDevUploadBtn" class="btn btn-primary">Upload</button>
           </div>
         </div>
       </div>`;
-  document.body.appendChild(modalEl);
+    document.body.appendChild(modalEl);
 
-  const dropzone = modalEl.querySelector(`#${ids.dropzone}`);
-  const fileInput = modalEl.querySelector(`#${ids.fileInput}`);
-  const preview = modalEl.querySelector(`#${ids.preview}`);
-  const clearBtn = modalEl.querySelector(`#${ids.clearBtn}`);
-  const uploadBtn = modalEl.querySelector(`#${ids.uploadBtn}`);
+    const dropzone = modalEl.querySelector('#projectDevDropzone');
+    const fileInput = modalEl.querySelector('#projectDevFileInput');
+    const preview = modalEl.querySelector('#projectDevPreview');
+    const clearBtn = modalEl.querySelector('#projectDevClearBtn');
+    const uploadBtn = modalEl.querySelector('#projectDevUploadBtn');
 
-  let selected = [];
+    let selected = [];
 
-  function renderPreview() {
-    preview.innerHTML = selected.map((item, idx) => {
-      const name = item.file.name;
-      const size = bytesToSize(item.file.size);
-      const url = item.url;
-      return `
+    function renderPreview() {
+      preview.innerHTML = selected.map((item, idx) => {
+        const name = item.file.name;
+        const size = bytesToSize(item.file.size);
+        const url = item.url;
+        return `
           <div class="col">
             <div class="position-relative preview-item">
-              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">&times;</button>
+              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">✕</button>
               <img src="${url}" alt="${name}">
-              <div class="meta mt-1 text-truncate" title="${name}">${name} - ${size}</div>
+              <div class="meta mt-1 text-truncate" title="${name}">${name} • ${size}</div>
             </div>
           </div>`;
-    }).join('');
+      }).join('');
 
-    preview.querySelectorAll('.remove-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const i = parseInt(btn.getAttribute('data-idx'), 10);
-        if (!isNaN(i) && selected[i]) {
-          URL.revokeObjectURL(selected[i].url);
-          selected.splice(i, 1);
-          renderPreview();
-        }
+      preview.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.getAttribute('data-idx'), 10);
+          if (!isNaN(i) && selected[i]) {
+            URL.revokeObjectURL(selected[i].url);
+            selected.splice(i, 1);
+            renderPreview();
+          }
+        });
       });
+    }
+
+    function addFiles(fileList) {
+      const files = Array.from(fileList || []);
+      const imgs = files.filter(f => f.type && (f.type.startsWith('image/') || f.type === 'application/pdf'));
+      imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
+      renderPreview();
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+    ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }));
+    ['dragleave','dragend','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', e => {
+      addFiles(e.dataTransfer?.files || []);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      selected.forEach(it => URL.revokeObjectURL(it.url));
+      selected = [];
+      fileInput.value = '';
+      renderPreview();
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+      const proj = document.querySelector('#projectSelect')?.value;
+      if (!proj) { showNotification('Please select a project first', 'error'); return; }
+      if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
+      if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+      try {
+        const hasSession = await hasSupabaseSession();
+        if (!hasSession) { showNotification('Not logged in', 'error'); return; }
+      } catch { showNotification('Auth check failed', 'error'); return; }
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      try {
+        const files = selected.map(s => s.file);
+        const results = await window.api.uploadProjectDevelopmentBatch(files, proj);
+        const ok = (results || []).length;
+        showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
+        // Reset and close modal
+        clearBtn.click();
+        if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+          bootstrap.Modal.getInstance(modalEl)?.hide();
+        } else {
+          modalEl.style.display = 'none';
+        }
+      } catch (err) {
+        console.error('Upload failed:', err);
+        showNotification('Failed to upload images', 'error');
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Upload';
+      }
     });
   }
 
-  function addFiles(fileList) {
-    const files = Array.from(fileList || []);
-    const imgs = files.filter(f => f.type && f.type.startsWith('image/'));
-    imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
-    renderPreview();
-  }
-
-  const stopEvents = e => { e.preventDefault(); e.stopPropagation(); };
-
-  dropzone.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', () => addFiles(fileInput.files));
-
-  ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
-    stopEvents(e);
-    dropzone.classList.add('dragover');
-  }));
-  ['dragleave','dragend'].forEach(evt => dropzone.addEventListener(evt, e => {
-    stopEvents(e);
-    dropzone.classList.remove('dragover');
-  }));
-  dropzone.addEventListener('drop', e => {
-    stopEvents(e);
-    dropzone.classList.remove('dragover');
-    addFiles(e.dataTransfer?.files || []);
-  });
-
-  clearBtn.addEventListener('click', () => {
-    selected.forEach(it => URL.revokeObjectURL(it.url));
-    selected = [];
-    fileInput.value = '';
-    renderPreview();
-  });
-
-  uploadBtn.addEventListener('click', async () => {
-    const proj = document.querySelector('#projectSelect')?.value;
-    if (!proj) { showNotification('Please select a project first', 'error'); return; }
-    if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
-    if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
-    try {
-      const hasSession = await hasSupabaseSession();
-      if (!hasSession) { showNotification('Not logged in', 'error'); return; }
-    } catch {
-      showNotification('Auth check failed', 'error');
-      return;
-    }
-
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = 'Uploading...';
-    try {
-      const files = selected.map(s => s.file);
-      const results = await uploadFn(files, proj);
-      const ok = (results || []).length;
-      showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
-      clearBtn.click();
-      if (window.bootstrap && typeof bootstrap.Modal === 'function') {
-        bootstrap.Modal.getInstance(modalEl)?.hide();
-      } else {
-        modalEl.style.display = 'none';
-      }
-    } catch (err) {
-      console.error(`${logLabel} upload failed:`, err);
-      showNotification('Failed to upload images', 'error');
-    } finally {
-      uploadBtn.disabled = false;
-      uploadBtn.textContent = 'Upload';
-    }
-  });
-
-  return modalEl;
-}
-
-function openDevUploadModal(config) {
-  ensureProjectDevStyles();
-  if (!devUploadModals[config.prefix]) {
-    devUploadModals[config.prefix] = createDevUploadModal(config);
-  }
-  const modalEl = devUploadModals[config.prefix];
   if (window.bootstrap && typeof bootstrap.Modal === 'function') {
     new bootstrap.Modal(modalEl).show();
   } else {
     modalEl.style.display = 'block';
   }
-}
-
-function openProjectDevUploadModal() {
-  openDevUploadModal({
-    prefix: 'projectDev',
-    title: 'Upload Project Development Images',
-    uploadFn: (files, project) => window.api.uploadProjectDevelopmentBatch(files, project),
-    logLabel: 'Project development',
-  });
 }
 
 // Hook the menu item
@@ -1583,24 +1397,9 @@ function openProjectDevUploadModal() {
   link.addEventListener('click', ev => { ev.preventDefault(); openProjectDevUploadModal(); });
 })();
 
-function openFutureDevUploadModal() {
-  openDevUploadModal({
-    prefix: 'futureDev',
-    title: 'Upload Future Development Images',
-    uploadFn: (files, project) => window.api.uploadFutureDevelopmentBatch(files, project),
-    logLabel: 'Future development',
-  });
-}
-
-(function hookFutureDevUpload() {
-  const link = document.getElementById('uploadFutureDev');
-  if (!link) return;
-  link.addEventListener('click', ev => { ev.preventDefault(); openFutureDevUploadModal(); });
-  })();
-  
-  // ---- Viewer for Project Development Updates ----
-  async function renderProjectDevGrid(grid, project) {
-    grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
+// ---- Viewer for Project Development Updates ----
+async function renderProjectDevGrid(grid, project) {
+  grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
   try {
     const items = (await window.api.getProjectDevImages(project)) || [];
     if (!items.length) {
@@ -1685,107 +1484,274 @@ function openProjectDevViewerModal() {
     new bootstrap.Modal(modalEl).show();
   } else {
     modalEl.style.display = 'block';
-    }
   }
-  
-  // Hook menu item for viewer
-  (function hookProjectDevViewer() {
-    const link = document.getElementById('viewProjectDevUpdates');
-    if (!link) return;
-    link.addEventListener('click', e => { e.preventDefault(); openProjectDevViewerModal(); });
-  })();
+}
 
-  // ---- Viewer for Future Development ----
-  async function renderFutureDevGrid(grid, project) {
-    grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
-    try {
-      const items = (await window.api.getFutureDevImages(project)) || [];
-      if (!items.length) {
-        grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development updates yet.</div>';
-        return;
-      }
-      grid.innerHTML = items.map((it, idx) => {
-        const url = it.image_link || it.image_URL || it.url;
-        const id = it.id || idx;
-        const title = it.project_name || project;
+// Hook menu item for viewer
+(function hookProjectDevViewer() {
+  const link = document.getElementById('viewProjectDevUpdates');
+  if (!link) return;
+  link.addEventListener('click', e => { e.preventDefault(); openProjectDevViewerModal(); });
+})();
+
+// ---- Future Development Upload (Drag & Drop, multiple, no save) ----
+function ensureFutureDevStyles() {
+  if (document.getElementById('futureDevUploadStyles')) return;
+  const css = `
+    #futureDevDropzone { border-style: dashed !important; cursor: pointer; }
+    #futureDevDropzone.dragover { border-color: #0d6efd !important; background: rgba(13,110,253,0.05); }
+    #futureDevPreview .preview-item img { width: 100%; height: 120px; object-fit: cover; border-radius: .5rem; }
+    #futureDevPreview .preview-item .meta { font-size: 12px; color: #6c757d; }
+    #futureDevPreview .remove-btn { position: absolute; top: 6px; right: 10px; }
+    /* Viewer styles */
+    #futureDevGrid .dev-card { position: relative; overflow: hidden; border-radius: .5rem; }
+    #futureDevGrid .dev-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    #futureDevGrid .dev-card .delete-btn { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s ease-in-out; }
+    #futureDevGrid .dev-card:hover .delete-btn { opacity: 1; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'futureDevUploadStyles';
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+function openFutureDevUploadModal() {
+  ensureFutureDevStyles();
+
+  let modalEl = document.getElementById('futureDevUploadModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.id = 'futureDevUploadModal';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Upload Future Development Images</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="futureDevDropzone" class="border border-2 border-secondary rounded-3 p-5 text-center">
+              <i class="fas fa-images fa-2x mb-3 text-secondary"></i>
+              <p class="mb-1">Drag and drop images here</p>
+              <p class="text-muted small">or click to browse</p>
+            </div>
+            <input type="file" id="futureDevFileInput" accept="image/*" multiple style="display:none">
+            <div id="futureDevPreview" class="row row-cols-2 row-cols-md-4 g-2 mt-3"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="futureDevClearBtn" class="btn btn-outline-secondary">Clear</button>
+            <button type="button" id="futureDevUploadBtn" class="btn btn-primary">Upload</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modalEl);
+
+    const dropzone = modalEl.querySelector('#futureDevDropzone');
+    const fileInput = modalEl.querySelector('#futureDevFileInput');
+    const preview = modalEl.querySelector('#futureDevPreview');
+    const clearBtn = modalEl.querySelector('#futureDevClearBtn');
+    const uploadBtn = modalEl.querySelector('#futureDevUploadBtn');
+
+    let selected = [];
+
+    function renderPreview() {
+      preview.innerHTML = selected.map((item, idx) => {
+        const name = item.file.name;
+        const size = bytesToSize(item.file.size);
+        const url = item.url;
         return `
-          <div class="col-6 col-md-4 col-lg-3" data-id="${id}">
-            <div class="dev-card border">
-              <button type="button" class="btn btn-sm btn-danger delete-btn" title="Delete" data-url="${encodeURIComponent(url)}">Delete</button>
-              <img src="${url}" alt="${title}">
+          <div class="col">
+            <div class="position-relative preview-item">
+              <button type="button" class="btn btn-sm btn-light border remove-btn" data-idx="${idx}">✕</button>
+              <img src="${url}" alt="${name}">
+              <div class="meta mt-1 text-truncate" title="${name}">${name} • ${size}</div>
             </div>
           </div>`;
       }).join('');
-  
-      grid.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const raw = btn.getAttribute('data-url') || '';
-          const url = decodeURIComponent(raw);
-          const card = btn.closest('[data-id]');
-          const ok = window.confirm('Delete this image? This cannot be undone.');
-          if (!ok) return;
-          try {
-            await window.api.deleteFutureDev(project, url);
-            if (card) card.remove();
-            showNotification('Image deleted', 'info');
-            if (!grid.querySelector('.dev-card')) {
-              grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development updates yet.</div>';
-            }
-          } catch (err) {
-            console.error('Delete failed:', err);
-            showNotification('Failed to delete image', 'error');
+
+      preview.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.getAttribute('data-idx'), 10);
+          if (!isNaN(i) && selected[i]) {
+            URL.revokeObjectURL(selected[i].url);
+            selected.splice(i, 1);
+            renderPreview();
           }
         });
       });
-    } catch (err) {
-      console.error(err);
-      grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Unable to load future development updates.</div>';
     }
+
+    function addFiles(fileList) {
+      const files = Array.from(fileList || []);
+      const imgs = files.filter(f => f.type && (f.type.startsWith('image/') || f.type === 'application/pdf'));
+      imgs.forEach(f => selected.push({ file: f, url: URL.createObjectURL(f) }));
+      renderPreview();
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+    ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }));
+    ['dragleave','dragend','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', e => {
+      addFiles(e.dataTransfer?.files || []);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      selected.forEach(it => URL.revokeObjectURL(it.url));
+      selected = [];
+      fileInput.value = '';
+      renderPreview();
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+      const proj = document.querySelector('#projectSelect')?.value;
+      if (!proj) { showNotification('Please select a project first', 'error'); return; }
+      if (!selected.length) { showNotification('Please add at least one image', 'error'); return; }
+      if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+      try {
+        const hasSession = await hasSupabaseSession();
+        if (!hasSession) { showNotification('Not logged in', 'error'); return; }
+      } catch { showNotification('Auth check failed', 'error'); return; }
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      try {
+        const files = selected.map(s => s.file);
+        const results = await window.api.uploadFutureDevelopmentBatch(files, proj);
+        const ok = (results || []).length;
+        showNotification(`Uploaded ${ok} image${ok === 1 ? '' : 's'} to ${proj}`, 'info');
+        clearBtn.click();
+        if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+          bootstrap.Modal.getInstance(modalEl)?.hide();
+        } else {
+          modalEl.style.display = 'none';
+        }
+      } catch (err) {
+        console.error('Upload failed:', err);
+        showNotification('Failed to upload images', 'error');
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Upload';
+      }
+    });
   }
-  
-  function openFutureDevViewerModal() {
-    ensureProjectDevStyles();
-    const project = document.querySelector('#projectSelect')?.value;
-    if (!project) { showNotification('Please select a project first', 'error'); return; }
-    if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
-  
-    let modalEl = document.getElementById('futureDevViewerModal');
-    if (!modalEl) {
-      modalEl = document.createElement('div');
-      modalEl.className = 'modal fade';
-      modalEl.id = 'futureDevViewerModal';
-      modalEl.tabIndex = -1;
-      modalEl.setAttribute('aria-hidden', 'true');
-      modalEl.innerHTML = `
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Future Development Updates</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-              <div id="futureDevGrid" class="row g-3"></div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+
+  if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+    new bootstrap.Modal(modalEl).show();
+  } else {
+    modalEl.style.display = 'block';
+  }
+}
+
+// Hook the menu item
+(function hookFutureDevUpload() {
+  const link = document.getElementById('uploadFutureDev');
+  if (!link) return;
+  link.addEventListener('click', ev => { ev.preventDefault(); openFutureDevUploadModal(); });
+})();
+
+// ---- Viewer for Future Development Updates ----
+async function renderFutureDevGrid(grid, project) {
+  grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">Loading...</div>';
+  try {
+    const items = (await window.api.getFutureDevImages(project)) || [];
+    if (!items.length) {
+      grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development images yet.</div>';
+      return;
+    }
+    grid.innerHTML = items.map((it, idx) => {
+      const url = it.image_link || it.image_URL || it.url;
+      const id = it.id || idx;
+      const title = it.project_name || project;
+      return `
+        <div class="col-6 col-md-4 col-lg-3" data-id="${id}">
+          <div class="dev-card border">
+            <button type="button" class="btn btn-sm btn-danger delete-btn" title="Delete" data-url="${encodeURIComponent(url)}">Delete</button>
+            <img src="${url}" alt="${title}">
           </div>
         </div>`;
-      document.body.appendChild(modalEl);
-    }
-  
-    const grid = modalEl.querySelector('#futureDevGrid');
-    renderFutureDevGrid(grid, project);
-  
-    if (window.bootstrap && typeof bootstrap.Modal === 'function') {
-      new bootstrap.Modal(modalEl).show();
-    } else {
-      modalEl.style.display = 'block';
-    }
+    }).join('');
+
+    grid.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const raw = btn.getAttribute('data-url') || '';
+        const url = decodeURIComponent(raw);
+        const card = btn.closest('[data-id]');
+        const ok = window.confirm('Delete this image? This cannot be undone.');
+        if (!ok) return;
+        try {
+          await window.api.deleteFutureDev(project, url);
+          if (card) card.remove();
+          showNotification('Image deleted', 'info');
+          if (!grid.querySelector('.dev-card')) {
+            grid.innerHTML = '<div class="text-center w-100 py-4 text-muted">No future development images yet.</div>';
+          }
+        } catch (err) {
+          console.error('Delete failed:', err);
+          showNotification('Failed to delete image', 'error');
+        }
+      });
+    });
+  } catch (e) {
+    console.warn('Failed to load future development images', e);
+    grid.innerHTML = '<div class="text-center w-100 py-4 text-danger">Failed to load. Try again.</div>';
   }
-  
-  (function hookFutureDevViewer() {
-    const link = document.getElementById('viewFutureDevUpdates');
-    if (!link) return;
-    link.addEventListener('click', e => { e.preventDefault(); openFutureDevViewerModal(); });
-  })();
+}
+
+function openFutureDevViewerModal() {
+  ensureFutureDevStyles();
+  const project = document.querySelector('#projectSelect')?.value;
+  if (!project) { showNotification('Please select a project first', 'error'); return; }
+  if (!window.api || !window.api.supabase) { showNotification('Supabase not configured', 'error'); return; }
+
+  let modalEl = document.getElementById('futureDevViewerModal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.id = 'futureDevViewerModal';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Future Development Updates</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="futureDevGrid" class="row g-3"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modalEl);
+  }
+
+  const grid = modalEl.querySelector('#futureDevGrid');
+  renderFutureDevGrid(grid, project);
+
+  if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+    new bootstrap.Modal(modalEl).show();
+  } else {
+    modalEl.style.display = 'block';
+  }
+}
+
+// Hook menu item for future dev viewer
+(function hookFutureDevViewer() {
+  const link = document.getElementById('viewFutureDevUpdates');
+  if (!link) return;
+  link.addEventListener('click', e => { e.preventDefault(); openFutureDevViewerModal(); });
+})();
